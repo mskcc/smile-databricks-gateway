@@ -126,14 +126,14 @@ var requestJSON = `
 `
 
 func TestDatabricksService(t *testing.T) {
-	databricksService, close, err := NewDatabricksService(TestConfig.DBToken, TestConfig.DBTokenComment, TestConfig.Hostname, TestConfig.HttpPath, TestConfig.SMILESchema, TestConfig.RequestTable, TestConfig.SampleTable, TestConfig.SlackURL, TestConfig.DBPort)
+	databricksService, close, err := NewDatabricksService(TestConfig.DBToken, TestConfig.DBTokenComment, TestConfig.DBHostname, TestConfig.HttpPath, TestConfig.SMILESchema, TestConfig.RequestTable, TestConfig.SampleTable, TestConfig.SlackURL, TestConfig.DBPort)
 	if err != nil {
 		t.Fatalf("databricks service cannot be created: %q", err)
 	}
 	defer close()
 
 	t.Run("inserting request to databricks", func(t *testing.T) {
-		wantRequest, err := unMarshal[SmileRequest](t, []byte(requestJSON))
+		wantRequest, err := unMarshalT[SmileRequest](t, []byte(requestJSON))
 		if err != nil {
 			t.Fatalf("cannot unmarshal request: %q", err)
 		}
@@ -155,7 +155,7 @@ func TestDatabricksService(t *testing.T) {
 	})
 
 	t.Run("updating request in databricks", func(t *testing.T) {
-		insertedRequest, err := unMarshal[SmileRequest](t, []byte(requestJSON))
+		insertedRequest, err := unMarshalT[SmileRequest](t, []byte(requestJSON))
 		if err != nil {
 			t.Fatalf("cannot unmarshal request: %q", err)
 		}
@@ -163,7 +163,7 @@ func TestDatabricksService(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		updatedRequest, err := unMarshal[SmileRequest](t, []byte(requestJSON))
+		updatedRequest, err := unMarshalT[SmileRequest](t, []byte(requestJSON))
 		if err != nil {
 			t.Fatalf("cannot unmarshal request: %q", err)
 		}
@@ -187,7 +187,7 @@ func TestDatabricksService(t *testing.T) {
 	})
 
 	t.Run("inserting sample to databricks", func(t *testing.T) {
-		wantRequest, err := unMarshal[SmileRequest](t, []byte(requestJSON))
+		wantRequest, err := unMarshalT[SmileRequest](t, []byte(requestJSON))
 		if err != nil {
 			t.Fatalf("cannot unmarshal request: %q", err)
 		}
@@ -210,7 +210,7 @@ func TestDatabricksService(t *testing.T) {
 	})
 
 	t.Run("updating sample to databricks", func(t *testing.T) {
-		wantRequest, err := unMarshal[SmileRequest](t, []byte(requestJSON))
+		wantRequest, err := unMarshalT[SmileRequest](t, []byte(requestJSON))
 		if err != nil {
 			t.Fatalf("cannot unmarshal request: %q", err)
 		}
@@ -239,7 +239,7 @@ func TestDatabricksService(t *testing.T) {
 
 }
 
-func unMarshal[T any](t testing.TB, b []byte) (T, error) {
+func unMarshalT[T any](t testing.TB, b []byte) (T, error) {
 	var target T
 	if err := json.Unmarshal(b, &target); err != nil {
 		return target, err
