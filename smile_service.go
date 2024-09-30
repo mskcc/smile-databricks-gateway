@@ -16,7 +16,7 @@ import (
 )
 
 type SmileService struct {
-	databricksService DatabricksService
+	databricksService *DatabricksService
 	natsMessaging     *nm.Messaging
 }
 
@@ -35,7 +35,7 @@ const (
 	sampleBufSize  = 1
 )
 
-func NewSmileService(url, certPath, keyPath, consumer, password string, databricksService DatabricksService) (*SmileService, error) {
+func NewSmileService(url, certPath, keyPath, consumer, password string, databricksService *DatabricksService) (*SmileService, error) {
 	natsMessaging, err := nm.NewSecureMessaging(url, certPath, keyPath, consumer, password)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create a nats messaging client: %q", err)

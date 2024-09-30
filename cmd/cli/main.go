@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -20,8 +19,8 @@ Usage:
   extract-datafeed --host=<hostname> --dbport=<port>
                    --dbtoken=<token>
                    --dbtokencomment=<comment>
-                   --path=<path>
-                   --schema=<schema>
+                   --dbhttppath=<path>
+                   --smileschema=<schema>
                    --requesttable=<requesttable>
                    --sampletable=<sampletable>
                    --momurl=<momurl>
@@ -37,18 +36,22 @@ Usage:
                    --tracerport=<port>
                    --ddservicename=<name>
                    --slackurl=<url>
+                   --saml2aws=<saml2aws>
+                   --saml2profile=<profile>
+                   --saml2region=<region>
+                   --awsdestbucket=<bucket>
 Options:
   -h --help                     Show this screen.
   --host=<hostname>             Databricks hostname.
   --dbport=<port>               Databricks port.
   --dbtoken=<token>             Databricks personal access token.
   --dbtokencomment=<comment>    Databricks personal access token comment.
-  --path=<path>                 The HTTP path to the Databricks SQL Warehouse.
-  --schema=<schema>             The Databricks schema where the Extract status and release tables reside.
+  --dbhttppath=<path>           The HTTP path to the Databricks SQL Warehouse.
+  --smileschema=<schema>        The Databricks schema where the Extract status and release tables reside.
   --requesttable=<requesttable> The Databricks table where request records are stored.
   --sampletable=<sampletable>   The Databricks table where sample records are stored.
   --momurl=<momurl>             The messaging system URL.
-  --momcrt=<momcert>            The messaging system certificate.
+  --momcert=<momcert>            The messaging system certificate.
   --momkey=<momkey>             The messaging system cert key.
   --momcons=<momcons>           The messaging system consumer (id)
   --mompw=<mompw>               The messaging system consumer pw.
@@ -59,9 +62,14 @@ Options:
   --tracerhost=<hostname>       OTel Tracer hostname.
   --tracerport=<port>           OTel Tracer port.
   --ddservicename=<name>        Datadog service name.
-  --slackurl=<url>              The URL to the slack channel for notification of new Extract project availability`
+  --slackurl=<url>              The URL to the slack channel for notification of new Extract project availability
+  --saml2aws=<saml2aws>         The saml2aws script
+  --saml2profile=<profile>      The aws creds profile
+  --saml2region=<region>        The aws region
+  --awsdestbucket=<bucket>      The dest bucket for smile json
+`
 
-func setupSignalListener(cancel context.CancelFunc, httpServer *http.Server, wg *sync.WaitGroup) {
+func setupSignalListener(cancel context.CancelFunc, wg *sync.WaitGroup) {
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -89,23 +97,24 @@ func main() {
 	err = args.Bind(&config)
 	handleError(err, "Error binding arguments")
 
-	setupSignalListener(cancel, httpServer, &wg)
-
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
-	shutdownTracer := edf.InitTracerProvider(ctx, config.OTELTracerHost, config.OTELTracerPort, config.DatadogServiceName, "prod")
+	var wg sync.WaitGroup
+	setupSignalListener(cancel, &wg)
+
+	shutdownTracer := sdg.InitTracerProvider(ctx, config.OTELTracerHost, config.OTELTracerPort, config.DatadogServiceName, "prod")
 	defer shutdownTracer()
 	tracer := otel.Tracer(config.DatadogServiceName + "-tracer")
 
-	databricksService, close, err := edf.NewDatabricksService(config.DBToken, config.DBTokenComment, config.Hostname, config.HttpPath, config.SMILESchema, config.RequestTable, config.SampleTable, config.SlackURL, config.DBPort)
+	databricksService, close, err := sdg.NewDatabricksService(config.DBToken, config.DBTokenComment, config.DBHostname, config.HttpPath, config.SMILESchema, config.RequestTable, config.SampleTable, config.SlackURL, config.DBPort)
 	handleError(err, "Databricks service cannot be created")
 	defer close()
 
 	// setup smile service
-	smileService, err := edf.NewSmileService(config.MomUrl, config.Mom.Cert, config.Mom.Key, config.Mom.Cons, config.Mom.Pw, databricksService)
+	smileService, err := sdg.NewSmileService(config.MomUrl, config.MomCert, config.MomKey, config.MomCons, config.MomPw, databricksService)
 	handleError(err, "SMILE Service cannot be created")
-	if err := smileService.Run(ctx, config.Mom.Cons, config.Mom.Sub, config.Mom.Nrf, config.Mom.Urf, config.Mom.Usf, tracer); err != nil {
+	if err := smileService.Run(ctx, config.MomCons, config.MomSub, config.MomNrf, config.MomUrf, config.MomUsf, tracer); err != nil {
 		os.Exit(1)
 	}
 	log.Println("Exiting SMILE Databricks Gateway...")
