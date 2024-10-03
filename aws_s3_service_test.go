@@ -1,46 +1,59 @@
 package smile_databricks_gateway
 
 import (
+	"fmt"
+	"reflect"
 	"testing"
 )
 
 func TestAWSS3(t *testing.T) {
 
-	t.Run("generating saml2aws token", func(t *testing.T) {
-		err := GenerateToken(TestConfig.SAML2AWSBin)
+	awsS3Service := NewAWSS3Service(TestConfig.SAML2AWSBin, TestConfig.SAMLProfile, TestConfig.SAMLRegion, TestConfig.AWSDestBucket)
+
+	t.Run("PutRequest", func(t *testing.T) {
+		putRequest, err := UnmarshalT[SmileRequest]([]byte(RequestJSON))
 		if err != nil {
-			t.Fatalf("cannot generate saml2aws token: %q", err)
+			t.Fatalf("cannot unmarshal request: %q", err)
+		}
+		filename := fmt.Sprintf("%s_request.json", putRequest.IgoRequestID)
+		err = awsS3Service.PutRequest(filename, putRequest)
+		if err != nil {
+			t.Fatalf("cannot PutRequest: %q", err)
+		}
+		gotRequest, err := awsS3Service.GetRequestObject(filename)
+		if err != nil {
+			t.Fatalf("cannot GetRequest: %q", err)
+		}
+		if !reflect.DeepEqual(gotRequest, putRequest) {
+			t.Errorf("got %v want %v", gotRequest, putRequest)
+		}
+		err = awsS3Service.DeleteObject(filename)
+		if err != nil {
+			t.Fatalf("cannot DeleteObject: %q", err)
 		}
 	})
 
-	t.Run("put object without saml2aws token", func(t *testing.T) {
-		wantErr := "Failed to load SDK configuration: failed to get shared config profile, bogus profile"
-		_, gotErr := CreateClient("bogus profile", "bogus region")
-		if gotErr.Error() != wantErr {
-			t.Fatalf("got %q want %q", gotErr, wantErr)
-		}
-	})
-
-	t.Run("put object with saml2aws token", func(t *testing.T) {
-		err := GenerateToken(TestConfig.SAML2AWSBin)
+	t.Run("PutSample", func(t *testing.T) {
+		putRequest, err := UnmarshalT[SmileRequest]([]byte(RequestJSON))
 		if err != nil {
-			t.Fatalf("cannot generate saml2aws token: %q", err)
+			t.Fatalf("cannot unmarshal request: %q", err)
 		}
-		s3Client, err := CreateClient("saml", "us-east-1")
+		putSample := putRequest.Samples[0]
+		filename := fmt.Sprintf("%s_sample.json", putSample.SampleName)
+		err = awsS3Service.PutSample(filename, putSample)
 		if err != nil {
-			t.Fatalf("cannot create s3Client: %q", err)
+			t.Fatalf("cannot PutSample: %q", err)
 		}
-
-		bucketName := "cbio-databucket"
-		objectKey := "test-file.txt"
-		fileContents := []byte("This is the file contents")
-		err = PutObject(s3Client, fileContents, objectKey, bucketName)
+		gotSample, err := awsS3Service.GetSampleObject(filename)
 		if err != nil {
-			t.Fatalf("cannot put test object into s3 bucket: %q", err)
+			t.Fatalf("cannot GetSample: %q", err)
 		}
-		err = DeleteObject(s3Client, objectKey, bucketName)
+		if !reflect.DeepEqual(gotSample, putSample) {
+			t.Errorf("got %v want %v", gotSample, putSample)
+		}
+		err = awsS3Service.DeleteObject(filename)
 		if err != nil {
-			t.Fatalf("cannot delete test object in s3 bucket: %q", err)
+			t.Fatalf("cannot DeleteObject: %q", err)
 		}
 	})
 }

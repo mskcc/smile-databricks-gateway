@@ -38,4 +38,7 @@ var TestConfig = Config{
 	RequestTable:   "",
 	SampleTable:    "",
 	SAML2AWSBin:    "",
+	SAMLProfile:    "",
+	SAMLRegion:     "",
+	AWSDestBucket:  "",
 }

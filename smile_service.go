@@ -16,6 +16,7 @@ import (
 )
 
 type SmileService struct {
+	awsS3Service      *AWSS3Service
 	databricksService *DatabricksService
 	natsMessaging     *nm.Messaging
 }
@@ -35,12 +36,12 @@ const (
 	sampleBufSize  = 1
 )
 
-func NewSmileService(url, certPath, keyPath, consumer, password string, databricksService *DatabricksService) (*SmileService, error) {
+func NewSmileService(url, certPath, keyPath, consumer, password string, awsS3Service *AWSS3Service, databricksService *DatabricksService) (*SmileService, error) {
 	natsMessaging, err := nm.NewSecureMessaging(url, certPath, keyPath, consumer, password)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create a nats messaging client: %q", err)
 	}
-	return &SmileService{databricksService: databricksService, natsMessaging: natsMessaging}, nil
+	return &SmileService{awsS3Service: awsS3Service, databricksService: databricksService, natsMessaging: natsMessaging}, nil
 }
 
 const (
@@ -90,16 +91,12 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 			nrwg.Add(1)
 			go func() {
 				defer nrwg.Done()
-				err := ss.databricksService.InsertRequest(ra.Requests[0])
+				filename := fmt.Sprintf("%s_request.json", ra.Requests[0].IgoRequestID)
+				err := ss.awsS3Service.PutRequest(filename, ra.Requests[0])
 				if handleError(err, newReqDBInsertErrMsg, nrSpan) {
 					return
 				}
 				nrSpan.AddEvent(newReqDBInsertSucMsg)
-				err = ss.databricksService.InsertSamples(ra.Requests[0].IgoRequestID, ra.Requests[0].Samples)
-				if handleError(err, newSampDBInsertErrMsg, nrSpan) {
-					return
-				}
-				nrSpan.AddEvent(newSampDBInsertSucMsg)
 				ra.Msg.ProviderMsg.Ack()
 			}()
 		case ra := <-updateRequestChan:
@@ -108,7 +105,8 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 			urwg.Add(1)
 			go func() {
 				defer urwg.Done()
-				err := ss.databricksService.UpdateRequest(ra.Requests[0])
+				filename := fmt.Sprintf("%s_request.json", ra.Requests[0].IgoRequestID)
+				err := ss.awsS3Service.PutRequest(filename, ra.Requests[0])
 				if handleError(err, upReqDBUpdateErrMsg, urSpan) {
 					return
 				}
@@ -122,7 +120,8 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 			uswg.Add(1)
 			go func() {
 				defer uswg.Done()
-				err := ss.databricksService.UpdateSample(sa.Samples[0].AdditionalProperties.IgoRequestID, sa.Samples[0])
+				filename := fmt.Sprintf("%s_sample.json", sa.Samples[0].SampleName)
+				err := ss.awsS3Service.PutSample(filename, sa.Samples[0])
 				if handleError(err, upSampleDBUpdateErrMsg, usSpan) {
 					return
 				}

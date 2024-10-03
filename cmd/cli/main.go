@@ -111,8 +111,10 @@ func main() {
 	handleError(err, "Databricks service cannot be created")
 	defer close()
 
+	awsS3Service := sdg.NewAWSS3Service(config.SAML2AWSBin, config.SAMLProfile, config.SAMLRegion, config.AWSDestBucket)
+
 	// setup smile service
-	smileService, err := sdg.NewSmileService(config.MomUrl, config.MomCert, config.MomKey, config.MomCons, config.MomPw, databricksService)
+	smileService, err := sdg.NewSmileService(config.MomUrl, config.MomCert, config.MomKey, config.MomCons, config.MomPw, awsS3Service, databricksService)
 	handleError(err, "SMILE Service cannot be created")
 	if err := smileService.Run(ctx, config.MomCons, config.MomSub, config.MomNrf, config.MomUrf, config.MomUsf, tracer); err != nil {
 		os.Exit(1)
