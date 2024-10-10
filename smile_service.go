@@ -16,9 +16,10 @@ import (
 )
 
 type SmileService struct {
-	awsS3Service      *AWSS3Service
-	databricksService *DatabricksService
-	natsMessaging     *nm.Messaging
+	awsS3Service          *AWSS3Service
+	databricksService     *DatabricksService
+	databricksRestService *DatabricksRestService
+	natsMessaging         *nm.Messaging
 }
 
 type RequestAdapter struct {
@@ -36,12 +37,12 @@ const (
 	sampleBufSize  = 1
 )
 
-func NewSmileService(url, certPath, keyPath, consumer, password string, awsS3Service *AWSS3Service, databricksService *DatabricksService) (*SmileService, error) {
+func NewSmileService(url, certPath, keyPath, consumer, password string, awsS3Service *AWSS3Service, databricksService *DatabricksService, databricksRestService *DatabricksRestService) (*SmileService, error) {
 	natsMessaging, err := nm.NewSecureMessaging(url, certPath, keyPath, consumer, password)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create a nats messaging client: %q", err)
 	}
-	return &SmileService{awsS3Service: awsS3Service, databricksService: databricksService, natsMessaging: natsMessaging}, nil
+	return &SmileService{awsS3Service: awsS3Service, databricksService: databricksService, databricksRestService: databricksRestService, natsMessaging: natsMessaging}, nil
 }
 
 const (
@@ -93,6 +94,10 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				defer nrwg.Done()
 				filename := fmt.Sprintf("%s_request.json", ra.Requests[0].IgoRequestID)
 				err := ss.awsS3Service.PutRequest(filename, ra.Requests[0])
+				if handleError(err, newReqDBInsertErrMsg, nrSpan) {
+					return
+				}
+				err = ss.databricksRestService.PutRequest(filename, ra.Requests[0])
 				if handleError(err, newReqDBInsertErrMsg, nrSpan) {
 					return
 				}

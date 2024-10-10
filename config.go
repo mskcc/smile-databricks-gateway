@@ -5,7 +5,8 @@ type Config struct {
 	DBPort             int    `docopt:"--dbport"`
 	DBToken            string `docopt:"--dbtoken"`
 	DBTokenComment     string `docopt:"--dbtokencomment"`
-	HttpPath           string `docopt:"--dbhttppath"`
+	DBHttpPath         string `docopt:"--dbhttppath"`
+	DBVolumePath       string `docopt:"--dbvolumepath"`
 	SMILESchema        string `docopt:"--smileschema"`
 	RequestTable       string `docopt:"--requesttable"`
 	SampleTable        string `docopt:"--sampletable"`
@@ -30,10 +31,11 @@ type Config struct {
 
 var TestConfig = Config{
 	DBHostname:     "",
-	DBPort:         0,
+	DBPort:         443,
 	DBToken:        "",
 	DBTokenComment: "",
-	HttpPath:       "",
+	DBHttpPath:     "",
+	DBVolumePath:   "",
 	SMILESchema:    "",
 	RequestTable:   "",
 	SampleTable:    "",
