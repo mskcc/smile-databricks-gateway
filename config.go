@@ -7,6 +7,7 @@ type Config struct {
 	DBTokenComment     string `docopt:"--dbtokencomment"`
 	DBHttpPath         string `docopt:"--dbhttppath"`
 	DBVolumePath       string `docopt:"--dbvolumepath"`
+	DLTPipelineName    string `docopt:"--dltpipelinename"`
 	SMILESchema        string `docopt:"--smileschema"`
 	RequestTable       string `docopt:"--requesttable"`
 	SampleTable        string `docopt:"--sampletable"`
@@ -30,17 +31,18 @@ type Config struct {
 }
 
 var TestConfig = Config{
-	DBHostname:     "",
-	DBPort:         443,
-	DBToken:        "",
-	DBTokenComment: "",
-	DBHttpPath:     "",
-	DBVolumePath:   "",
-	SMILESchema:    "",
-	RequestTable:   "",
-	SampleTable:    "",
-	SAML2AWSBin:    "",
-	SAMLProfile:    "",
-	SAMLRegion:     "",
-	AWSDestBucket:  "",
+	DBHostname:      "",
+	DBPort:          443,
+	DBToken:         "",
+	DBTokenComment:  "",
+	DBHttpPath:      "",
+	DBVolumePath:    "",
+	DLTPipelineName: "",
+	SMILESchema:     "",
+	RequestTable:    "",
+	SampleTable:     "",
+	SAML2AWSBin:     "",
+	SAMLProfile:     "",
+	SAMLRegion:      "",
+	AWSDestBucket:   "",
 }

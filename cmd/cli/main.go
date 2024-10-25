@@ -21,6 +21,7 @@ Usage:
                    --dbtokencomment=<comment>
                    --dbhttppath=<path>
                    --dbvolumepath=<path>
+                   --dltpipelinename=<dltpipelinename>
                    --smileschema=<schema>
                    --requesttable=<requesttable>
                    --sampletable=<sampletable>
@@ -42,33 +43,34 @@ Usage:
                    --saml2region=<region>
                    --awsdestbucket=<bucket>
 Options:
-  -h --help                     Show this screen.
-  --host=<hostname>             Databricks hostname.
-  --dbport=<port>               Databricks port.
-  --dbtoken=<token>             Databricks personal access token.
-  --dbtokencomment=<comment>    Databricks personal access token comment.
-  --dbhttppath=<path>           The HTTP path to the Databricks SQL Warehouse.
-  --dbvolumepath=<path>         The path to the Databricks volume where the json files will be written.
-  --smileschema=<schema>        The Databricks schema where the Extract status and release tables reside.
-  --requesttable=<requesttable> The Databricks table where request records are stored.
-  --sampletable=<sampletable>   The Databricks table where sample records are stored.
-  --momurl=<momurl>             The messaging system URL.
-  --momcert=<momcert>            The messaging system certificate.
-  --momkey=<momkey>             The messaging system cert key.
-  --momcons=<momcons>           The messaging system consumer (id)
-  --mompw=<mompw>               The messaging system consumer pw.
-  --momsub=<momsub>             The messaging system subject (topic).
-  --momnrf<momnrf>              The messaging system new request topic filter.
-  --momurf<momurf>              The messaging system update request topic filter.
-  --momusf<momusf>              The messaging system update sample topic filter.
-  --tracerhost=<hostname>       OTel Tracer hostname.
-  --tracerport=<port>           OTel Tracer port.
-  --ddservicename=<name>        Datadog service name.
-  --slackurl=<url>              The URL to the slack channel for notification of new Extract project availability
-  --saml2aws=<saml2aws>         The saml2aws script
-  --saml2profile=<profile>      The aws creds profile
-  --saml2region=<region>        The aws region
-  --awsdestbucket=<bucket>      The dest bucket for smile json
+  -h --help                           Show this screen.
+  --host=<hostname>                   Databricks hostname.
+  --dbport=<port>                     Databricks port.
+  --dbtoken=<token>                   Databricks personal access token.
+  --dbtokencomment=<comment>          Databricks personal access token comment.
+  --dbhttppath=<path>                 The HTTP path to the Databricks SQL Warehouse.
+  --dbvolumepath=<path>               The path to the Databricks volume where the json files will be written.
+  --dltpipelinename=<dltpipelinename> The name of the delta live table pipeline to be executed after json files are added to volume.
+  --smileschema=<schema>              The Databricks schema where the Extract status and release tables reside.
+  --requesttable=<requesttable>       The Databricks table where request records are stored.
+  --sampletable=<sampletable>         The Databricks table where sample records are stored.
+  --momurl=<momurl>                   The messaging system URL.
+  --momcert=<momcert>                 The messaging system certificate.
+  --momkey=<momkey>                   The messaging system cert key.
+  --momcons=<momcons>                 The messaging system consumer (id)
+  --mompw=<mompw>                     The messaging system consumer pw.
+  --momsub=<momsub>                   The messaging system subject (topic).
+  --momnrf<momnrf>                    The messaging system new request topic filter.
+  --momurf<momurf>                    The messaging system update request topic filter.
+  --momusf<momusf>                    The messaging system update sample topic filter.
+  --tracerhost=<hostname>             OTel Tracer hostname.
+  --tracerport=<port>                 OTel Tracer port.
+  --ddservicename=<name>              Datadog service name.
+  --slackurl=<url>                    The URL to the slack channel for notification of new Extract project availability
+  --saml2aws=<saml2aws>               The saml2aws script
+  --saml2profile=<profile>            The aws creds profile
+  --saml2region=<region>              The aws region
+  --awsdestbucket=<bucket>            The dest bucket for smile json
 `
 
 func setupSignalListener(cancel context.CancelFunc, wg *sync.WaitGroup) {
@@ -113,7 +115,7 @@ func main() {
 	handleError(err, "Databricks service cannot be created")
 	defer close()
 
-	databricksRestService, err := sdg.NewDatabricksRestService(config.DBHostname, config.DBToken, config.DBVolumePath)
+	databricksRestService, err := sdg.NewDatabricksRestService(config.DBHostname, config.DBToken, config.DBVolumePath, config.DLTPipelineName)
 	handleError(err, "Databricks rest service cannot be created")
 
 	awsS3Service := sdg.NewAWSS3Service(config.SAML2AWSBin, config.SAMLProfile, config.SAMLRegion, config.AWSDestBucket)

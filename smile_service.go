@@ -62,6 +62,8 @@ const (
 	updateSampleMsg        = "Attempting to update a sample in databricks"
 	upSampleDBUpdateErrMsg = "Error updating sample in Databricks"
 	upSampleDBUpdateSucMsg = "Successfully updated sample into Databricks"
+	execDLTPipelineErrMsg  = "Unsuccessfully executed DLT pipeline"
+	execDLTPipelineSucMsg  = "Successfully executed DLT pipeline"
 )
 
 func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFilter, updateRequestFilter, updateSampleFilter string, tracer trace.Tracer) error {
@@ -103,6 +105,11 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				}
 				nrSpan.AddEvent(newReqDBInsertSucMsg)
 				ra.Msg.ProviderMsg.Ack()
+				err = ss.databricksRestService.ExecutePipeline(selectCtx)
+				if handleError(err, execDLTPipelineErrMsg, nrSpan) {
+					return
+				}
+				nrSpan.AddEvent(execDLTPipelineSucMsg)
 			}()
 		case ra := <-updateRequestChan:
 			_, urSpan := tracer.Start(selectCtx, updateRequestMsg)
@@ -117,6 +124,11 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				}
 				urSpan.AddEvent(upReqDBUpdateSucMsg)
 				ra.Msg.ProviderMsg.Ack()
+				err = ss.databricksRestService.ExecutePipeline(selectCtx)
+				if handleError(err, execDLTPipelineErrMsg, urSpan) {
+					return
+				}
+				urSpan.AddEvent(execDLTPipelineSucMsg)
 			}()
 		case sa := <-updateSampleChan:
 			_, usSpan := tracer.Start(selectCtx, updateSampleMsg)
@@ -132,6 +144,12 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				}
 				usSpan.AddEvent(upSampleDBUpdateSucMsg)
 				sa.Msg.ProviderMsg.Ack()
+				ss.databricksRestService.ExecutePipeline(selectCtx)
+				err = ss.databricksRestService.ExecutePipeline(selectCtx)
+				if handleError(err, execDLTPipelineErrMsg, usSpan) {
+					return
+				}
+				usSpan.AddEvent(execDLTPipelineSucMsg)
 			}()
 		case <-ctx.Done():
 			log.Println("Context canceled, returning...")

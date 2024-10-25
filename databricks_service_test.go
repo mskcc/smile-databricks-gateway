@@ -6,7 +6,7 @@ import (
 )
 
 func TestDatabricksService(t *testing.T) {
-	databricksService, close, err := NewDatabricksService(TestConfig.DBToken, TestConfig.DBTokenComment, TestConfig.DBHostname, TestConfig.HttpPath, TestConfig.SMILESchema, TestConfig.RequestTable, TestConfig.SampleTable, TestConfig.SlackURL, TestConfig.DBPort)
+	databricksService, close, err := NewDatabricksService(TestConfig.DBToken, TestConfig.DBTokenComment, TestConfig.DBHostname, TestConfig.DBHttpPath, TestConfig.SMILESchema, TestConfig.RequestTable, TestConfig.SampleTable, TestConfig.SlackURL, TestConfig.DBPort)
 	if err != nil {
 		t.Fatalf("databricks service cannot be created: %q", err)
 	}
