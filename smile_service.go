@@ -95,13 +95,19 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 			go func() {
 				defer nrwg.Done()
 				filename := fmt.Sprintf("%s_request.json", ra.Requests[0].IgoRequestID)
+				// pull samples out of request and persist them separately
+				samples := ra.Requests[0].Samples
+				ra.Requests[0].Samples = nil
 				err := ss.awsS3Service.PutRequest(filename, ra.Requests[0])
 				if handleError(err, newReqDBInsertErrMsg, nrSpan) {
 					return
 				}
-				err = ss.databricksRestService.PutRequest(filename, ra.Requests[0])
-				if handleError(err, newReqDBInsertErrMsg, nrSpan) {
-					return
+				for _, sample := range samples {
+					filename := fmt.Sprintf("%s_sample.json", sample.SampleName)
+					err := ss.awsS3Service.PutSample(filename, sample)
+					if handleError(err, newReqDBInsertErrMsg, nrSpan) {
+						return
+					}
 				}
 				nrSpan.AddEvent(newReqDBInsertSucMsg)
 				ra.Msg.ProviderMsg.Ack()
