@@ -16,10 +16,9 @@ import (
 )
 
 type SmileService struct {
-	awsS3Service          *AWSS3Service
-	databricksService     *DatabricksService
-	databricksRestService *DatabricksRestService
-	natsMessaging         *nm.Messaging
+	awsS3Service      *AWSS3Service
+	databricksService *DatabricksService
+	natsMessaging     *nm.Messaging
 }
 
 type RequestAdapter struct {
@@ -37,12 +36,12 @@ const (
 	sampleBufSize  = 1
 )
 
-func NewSmileService(url, certPath, keyPath, consumer, password string, awsS3Service *AWSS3Service, databricksService *DatabricksService, databricksRestService *DatabricksRestService) (*SmileService, error) {
+func NewSmileService(url, certPath, keyPath, consumer, password string, awsS3Service *AWSS3Service, databricksService *DatabricksService) (*SmileService, error) {
 	natsMessaging, err := nm.NewSecureMessaging(url, certPath, keyPath, consumer, password)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create a nats messaging client: %q", err)
 	}
-	return &SmileService{awsS3Service: awsS3Service, databricksService: databricksService, databricksRestService: databricksRestService, natsMessaging: natsMessaging}, nil
+	return &SmileService{awsS3Service: awsS3Service, databricksService: databricksService, natsMessaging: natsMessaging}, nil
 }
 
 const (
@@ -84,7 +83,6 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 	var urwg sync.WaitGroup
 	var uswg sync.WaitGroup
 	for {
-
 		selectCtx, runLoopSpan := tracer.Start(runCtx, runLoopSpanMsg)
 
 		select {
@@ -111,7 +109,7 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				}
 				nrSpan.AddEvent(newReqDBInsertSucMsg)
 				ra.Msg.ProviderMsg.Ack()
-				err = ss.databricksRestService.ExecutePipeline(selectCtx)
+				err = ss.databricksService.ExecutePipeline(selectCtx)
 				if handleError(err, execDLTPipelineErrMsg, nrSpan) {
 					return
 				}
@@ -130,7 +128,7 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				}
 				urSpan.AddEvent(upReqDBUpdateSucMsg)
 				ra.Msg.ProviderMsg.Ack()
-				err = ss.databricksRestService.ExecutePipeline(selectCtx)
+				err = ss.databricksService.ExecutePipeline(selectCtx)
 				if handleError(err, execDLTPipelineErrMsg, urSpan) {
 					return
 				}
@@ -150,8 +148,7 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				}
 				usSpan.AddEvent(upSampleDBUpdateSucMsg)
 				sa.Msg.ProviderMsg.Ack()
-				ss.databricksRestService.ExecutePipeline(selectCtx)
-				err = ss.databricksRestService.ExecutePipeline(selectCtx)
+				err = ss.databricksService.ExecutePipeline(selectCtx)
 				if handleError(err, execDLTPipelineErrMsg, usSpan) {
 					return
 				}

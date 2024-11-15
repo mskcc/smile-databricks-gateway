@@ -6,7 +6,6 @@ type Config struct {
 	DBToken            string `docopt:"--dbtoken"`
 	DBTokenComment     string `docopt:"--dbtokencomment"`
 	DBHttpPath         string `docopt:"--dbhttppath"`
-	DBVolumePath       string `docopt:"--dbvolumepath"`
 	DLTPipelineName    string `docopt:"--dltpipelinename"`
 	SMILESchema        string `docopt:"--smileschema"`
 	RequestTable       string `docopt:"--requesttable"`
@@ -36,7 +35,6 @@ var TestConfig = Config{
 	DBToken:         "",
 	DBTokenComment:  "",
 	DBHttpPath:      "",
-	DBVolumePath:    "",
 	DLTPipelineName: "",
 	SMILESchema:     "",
 	RequestTable:    "",
