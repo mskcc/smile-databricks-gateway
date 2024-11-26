@@ -15,43 +15,36 @@ import (
 const usage = `smile-databricks-gateway.
 
 Usage:
-  extract-datafeed -h | --help
-  extract-datafeed --host=<hostname> --dbport=<port>
-                   --dbtoken=<token>
-                   --dbtokencomment=<comment>
-                   --dbhttppath=<path>
-                   --dltpipelinename=<dltpipelinename>
-                   --smileschema=<schema>
-                   --requesttable=<requesttable>
-                   --sampletable=<sampletable>
-                   --momurl=<momurl>
-                   --momcert=<momcert>
-                   --momkey=<momkey>
-                   --momcons=<momcons>
-                   --mompw=<mompw>
-                   --momsub=<momsub>
-                   --momnrf=<momnrf>
-                   --momurf=<momurf>
-                   --momusf=<momusf>
-                   --tracerhost=<hostname>
-                   --tracerport=<port>
-                   --ddservicename=<name>
-                   --slackurl=<url>
-                   --saml2aws=<saml2aws>
-                   --saml2profile=<profile>
-                   --saml2region=<region>
-                   --awsdestbucket=<bucket>
+  smile-databricks-gateway -h | --help
+  smile-databricks-gateway --host=<hostname>
+                           --dbtoken=<token>
+                           --dbtokencomment=<comment>
+                           --dbhttppath=<path>
+                           --dltpipelinename=<dltpipelinename>
+                           --momurl=<momurl>
+                           --momcert=<momcert>
+                           --momkey=<momkey>
+                           --momcons=<momcons>
+                           --mompw=<mompw>
+                           --momsub=<momsub>
+                           --momnrf=<momnrf>
+                           --momurf=<momurf>
+                           --momusf=<momusf>
+                           --tracerhost=<hostname>
+                           --tracerport=<port>
+                           --ddservicename=<name>
+                           --slackurl=<url>
+                           --saml2aws=<saml2aws>
+                           --saml2profile=<profile>
+                           --saml2region=<region>
+                           --awsdestbucket=<bucket>
 Options:
   -h --help                           Show this screen.
   --host=<hostname>                   Databricks hostname.
-  --dbport=<port>                     Databricks port.
   --dbtoken=<token>                   Databricks personal access token.
   --dbtokencomment=<comment>          Databricks personal access token comment.
   --dbhttppath=<path>                 The HTTP path to the Databricks SQL Warehouse.
   --dltpipelinename=<dltpipelinename> The name of the delta live table pipeline to be executed after json files are added to volume.
-  --smileschema=<schema>              The Databricks schema where the Extract status and release tables reside.
-  --requesttable=<requesttable>       The Databricks table where request records are stored.
-  --sampletable=<sampletable>         The Databricks table where sample records are stored.
   --momurl=<momurl>                   The messaging system URL.
   --momcert=<momcert>                 The messaging system certificate.
   --momkey=<momkey>                   The messaging system cert key.
