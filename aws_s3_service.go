@@ -62,7 +62,7 @@ func put[T any](s3Client *s3.Client, awsBucketKey, awsDestBucket string, t T) er
 }
 
 func generateToken(saml2awsBin string) error {
-	cmd := exec.Command("bash", saml2awsBin)
+	cmd := exec.Command("sh", saml2awsBin)
 	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("Failed to run %q, err: %v", saml2awsBin, err)
