@@ -66,9 +66,11 @@ const (
 	succProcessedUpSampMsg = "Successfully processed sample update: %d"
 	execDLTPipelineErrMsg  = "Unsuccessfully executed DLT pipeline"
 	execDLTPipelineSucMsg  = "Successfully executed DLT pipeline"
+	errSlackNotifMsg       = "Error sending slack notification"
+	succSlackNotifMsg      = "Successfully sent slack notification"
 )
 
-func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFilter, updateRequestFilter, updateSampleFilter string, tracer trace.Tracer) error {
+func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFilter, updateRequestFilter, updateSampleFilter string, tracer trace.Tracer, slackURL string) error {
 
 	newRequestChan := make(chan RequestAdapter, requestBufSize)
 	updateRequestChan := make(chan RequestAdapter, requestBufSize)
@@ -114,6 +116,12 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 					return
 				}
 				nrSpan.AddEvent(execDLTPipelineSucMsg)
+				mesg := fmt.Sprintf("{\"text\":\"New request written to Databricks:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
+				err = NotifyViaSlack(nrCtx, mesg, slackURL)
+				if handleError(err, errSlackNotifMsg, nrSpan) {
+					return
+				}
+				nrSpan.AddEvent(succSlackNotifMsg)
 				nrSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedNewReqMsg, ra.Requests[0].IgoRequestID))
 				nrSpan.End()
 			}()
@@ -135,6 +143,12 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 					return
 				}
 				urSpan.AddEvent(execDLTPipelineSucMsg)
+				mesg := fmt.Sprintf("{\"text\":\"Updated request written to Databricks:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
+				err = NotifyViaSlack(urCtx, mesg, slackURL)
+				if handleError(err, errSlackNotifMsg, urSpan) {
+					return
+				}
+				urSpan.AddEvent(succSlackNotifMsg)
 				urSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedUpReqMsg, ra.Requests[0].IgoRequestID))
 				urSpan.End()
 			}()
@@ -157,6 +171,12 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 					return
 				}
 				usSpan.AddEvent(execDLTPipelineSucMsg)
+				mesg := fmt.Sprintf("{\"text\":\"Updated sample written to Databricks:\n\tSample Name: %s\"}", sa.Samples[0].SampleName)
+				err = NotifyViaSlack(usCtx, mesg, slackURL)
+				if handleError(err, errSlackNotifMsg, usSpan) {
+					return
+				}
+				usSpan.AddEvent(succSlackNotifMsg)
 				usSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedUpSampMsg, sa.Samples[0].SampleName))
 				usSpan.End()
 			}()
