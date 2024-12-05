@@ -66,11 +66,12 @@ const (
 	succProcessedUpSampMsg = "Successfully processed sample update: %d"
 	execDLTPipelineErrMsg  = "Unsuccessfully executed DLT pipeline"
 	execDLTPipelineSucMsg  = "Successfully executed DLT pipeline"
+	DLTPipelineNameKey     = "DLT Pipeline Name"
 	errSlackNotifMsg       = "Error sending slack notification"
 	succSlackNotifMsg      = "Successfully sent slack notification"
 )
 
-func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFilter, updateRequestFilter, updateSampleFilter string, tracer trace.Tracer, slackURL string) error {
+func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFilter, updateRequestFilter, updateSampleFilter string, tracer trace.Tracer, slackURL, dltPipelineName string) error {
 
 	newRequestChan := make(chan RequestAdapter, requestBufSize)
 	updateRequestChan := make(chan RequestAdapter, requestBufSize)
@@ -109,13 +110,13 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 					nrSpan.AddEvent(newSampleS3WriteSucMsg, trace.WithAttributes(attribute.String(SampleNameKey, sample.SampleName)))
 				}
 				nrSpan.SetAttributes(attribute.Int(NumSamplesWrittenKey, len(samples)))
-				nrSpan.AddEvent(newReqS3WriteSucMsg, trace.WithAttributes(attribute.String(IGORequestIdKey, ra.Requests[0].IgoRequestID)))
+				nrSpan.AddEvent(newReqS3WriteSucMsg, trace.WithAttributes(attribute.String(IGORequestIdKey, ra.Requests[0].IgoRequestID), attribute.Int(NumSamplesWrittenKey, len(samples))))
 				ra.Msg.ProviderMsg.Ack()
 				err = ss.databricksService.ExecutePipeline(nrCtx)
 				if handleError(err, execDLTPipelineErrMsg, nrSpan) {
 					return
 				}
-				nrSpan.AddEvent(execDLTPipelineSucMsg)
+				nrSpan.AddEvent(execDLTPipelineSucMsg, trace.WithAttributes(attribute.String(DLTPipelineNameKey, dltPipelineName)))
 				mesg := fmt.Sprintf("{\"text\":\"New request written to Databricks:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
 				err = NotifyViaSlack(nrCtx, mesg, slackURL)
 				if handleError(err, errSlackNotifMsg, nrSpan) {
@@ -142,7 +143,7 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				if handleError(err, execDLTPipelineErrMsg, urSpan) {
 					return
 				}
-				urSpan.AddEvent(execDLTPipelineSucMsg)
+				urSpan.AddEvent(execDLTPipelineSucMsg, trace.WithAttributes(attribute.String(DLTPipelineNameKey, dltPipelineName)))
 				mesg := fmt.Sprintf("{\"text\":\"Updated request written to Databricks:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
 				err = NotifyViaSlack(urCtx, mesg, slackURL)
 				if handleError(err, errSlackNotifMsg, urSpan) {
@@ -170,7 +171,7 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				if handleError(err, execDLTPipelineErrMsg, usSpan) {
 					return
 				}
-				usSpan.AddEvent(execDLTPipelineSucMsg)
+				usSpan.AddEvent(execDLTPipelineSucMsg, trace.WithAttributes(attribute.String(DLTPipelineNameKey, dltPipelineName)))
 				mesg := fmt.Sprintf("{\"text\":\"Updated sample written to Databricks:\n\tSample Name: %s\"}", sa.Samples[0].SampleName)
 				err = NotifyViaSlack(usCtx, mesg, slackURL)
 				if handleError(err, errSlackNotifMsg, usSpan) {
@@ -192,17 +193,17 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 }
 
 const (
-	incomingNewReqMsg      = "New incoming request"
-	processingNewReqErrMsg = "Error unmarshaling new incoming request"
-	processingNewReqSucMsg = "Successfully unmarshaled new incoming request"
+	incomingNewReqMsg      = "Received new request"
+	processingNewReqErrMsg = "Error unmarshaling new request"
+	processingNewReqSucMsg = "Successfully unmarshaled new request"
 
-	incomingUpReqMsg      = "Updated incoming request"
-	processingUpReqErrMsg = "Error unmarshaling updated incoming request"
-	processingUpReqSucMsg = "Successfully received and unmarshaled updated incoming request"
+	incomingUpReqMsg      = "Received request update"
+	processingUpReqErrMsg = "Error unmarshaling request update"
+	processingUpReqSucMsg = "Successfully unmarshaled request update"
 
-	incomingUpSampMsg      = "Updated incoming sample"
-	processingUpSampErrMsg = "Error unmarshaling updated incoming sample"
-	processingUpSampSucMsg = "Successfully received and unmarshaled updated incoming sample"
+	incomingUpSampMsg      = "Received sample update"
+	processingUpSampErrMsg = "Error unmarshaling sample update"
+	processingUpSampSucMsg = "Successfully unmarshaled sample update"
 
 	handingOffRequestToRunLoopMsg = "Handing off request for writing to S3 bucket connected to Databricks"
 	handingOffSampleToRunLoopMsg  = "Handing off sample for writing to an S3 bucket connected to Databricks"

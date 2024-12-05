@@ -110,7 +110,7 @@ func main() {
 	// setup smile service
 	smileService, err := sdg.NewSmileService(config.MomUrl, config.MomCert, config.MomKey, config.MomCons, config.MomPw, awsS3Service, databricksService)
 	handleError(err, "SMILE Service cannot be created")
-	if err := smileService.Run(ctx, config.MomCons, config.MomSub, config.MomNrf, config.MomUrf, config.MomUsf, tracer, config.SlackURL); err != nil {
+	if err := smileService.Run(ctx, config.MomCons, config.MomSub, config.MomNrf, config.MomUrf, config.MomUsf, tracer, config.SlackURL, config.DLTPipelineName); err != nil {
 		os.Exit(1)
 	}
 	log.Println("Exiting SMILE Databricks Gateway...")
