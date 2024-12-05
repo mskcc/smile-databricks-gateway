@@ -82,6 +82,7 @@ json_sample_schema = StructType([
     StructField("additionalProperties", StructType([
         StructField("igoRequestId", StringType(), True),
     ])),
+    StructField("primaryId", StringType(), True),
     StructField("sampleName", StringType(), True),
     StructField("cmoSampleName", StringType(), True),
     StructField("cfDNA2dBarcode", StringType(), True),
@@ -99,6 +100,7 @@ def bronze_samples():
         .withColumn("parsed_json", from_json(col("value"), json_sample_schema))
         .select(
             col("parsed_json.additionalProperties.igoRequestId").alias("IGO_REQUEST_ID"),
+            col("parsed_json.primaryId").alias("IGO_PRIMARY_ID"),
             col("parsed_json.sampleName").alias("IGO_SAMPLE_NAME"),
             col("parsed_json.cmoSampleName").alias("CMO_SAMPLE_NAME"),
             col("parsed_json.cfDNA2dBarcode").alias("CFDNA2DBARCODE"),
@@ -115,7 +117,7 @@ dlt.create_streaming_table(
 dlt.apply_changes(
     target = "silver_samples",
     source = "bronze_samples",
-    keys = ["IGO_REQUEST_ID", "IGO_SAMPLE_NAME"],
+    keys = ["IGO_REQUEST_ID", "IGO_PRIMARY_ID"],
     stored_as_scd_type = "1",
     sequence_by = "INGEST_TIME"
 )
