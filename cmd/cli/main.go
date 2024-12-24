@@ -38,6 +38,7 @@ Usage:
                            --saml2profile=<profile>
                            --saml2region=<region>
                            --awsdestbucket=<bucket>
+                           --awssessionduration=<duration>
 Options:
   -h --help                           Show this screen.
   --host=<hostname>                   Databricks hostname.
@@ -62,6 +63,7 @@ Options:
   --saml2profile=<profile>            The aws creds profile
   --saml2region=<region>              The aws region
   --awsdestbucket=<bucket>            The dest bucket for smile json
+  --awssessionduration=<duration>     The time of the aws session (in seconds)
 `
 
 func setupSignalListener(cancel context.CancelFunc, wg *sync.WaitGroup) {
@@ -105,7 +107,7 @@ func main() {
 	databricksService, err := sdg.NewDatabricksService(config.DBHostname, config.DBToken, config.DLTPipelineName)
 	handleError(err, "Databricks service cannot be created")
 
-	awsS3Service := sdg.NewAWSS3Service(config.SAML2AWSBin, config.SAMLProfile, config.SAMLRegion, config.AWSDestBucket)
+	awsS3Service := sdg.NewAWSS3Service(config.SAML2AWSBin, config.SAMLProfile, config.SAMLRegion, config.AWSDestBucket, config.AWSSessionDuration)
 
 	// setup smile service
 	smileService, err := sdg.NewSmileService(config.MomUrl, config.MomCert, config.MomKey, config.MomCons, config.MomPw, awsS3Service, databricksService)

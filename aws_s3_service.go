@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -14,14 +15,17 @@ import (
 )
 
 type AWSS3Service struct {
-	saml2AWSBin string
-	samlProfile string
-	samlRegion  string
-	bucketName  string
+	saml2AWSBin     string
+	samlProfile     string
+	samlRegion      string
+	bucketName      string
+	sessionStart    time.Time
+	sessionDuration float64
+	client          *s3.Client
 }
 
-func NewAWSS3Service(saml2awsBin, samlProfile, samlRegion, bucketName string) *AWSS3Service {
-	return &AWSS3Service{saml2AWSBin: saml2awsBin, samlProfile: samlProfile, samlRegion: samlRegion, bucketName: bucketName}
+func NewAWSS3Service(saml2awsBin, samlProfile, samlRegion, bucketName string, sessionDuration float64) *AWSS3Service {
+	return &AWSS3Service{saml2AWSBin: saml2awsBin, samlProfile: samlProfile, samlRegion: samlRegion, bucketName: bucketName, sessionDuration: sessionDuration}
 }
 
 func (a *AWSS3Service) PutRequest(bucketKey string, sr SmileRequest) error {
@@ -59,26 +63,6 @@ func put[T any](s3Client *s3.Client, awsBucketKey, awsDestBucket string, t T) er
 		return fmt.Errorf("Failed to putObject: %q", err)
 	}
 	return nil
-}
-
-func generateToken(saml2awsBin string) error {
-	cmd := exec.Command("sh", saml2awsBin)
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("Failed to run %q, err: %v", saml2awsBin, err)
-	}
-	return nil
-}
-
-func createClient(credsProfile, region string) (*s3.Client, error) {
-	var client *s3.Client
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(region),
-		config.WithSharedConfigProfile(credsProfile))
-	if err != nil {
-		return client, fmt.Errorf("Failed to load SDK configuration: %v", err)
-	}
-	return s3.NewFromConfig(cfg), nil
 }
 
 func putObject(client *s3.Client, content []byte, bucketKey, bucketName string) error {
@@ -166,15 +150,47 @@ func (a *AWSS3Service) getObjectData(bucketKey string) ([]byte, error) {
 	return data, nil
 }
 
-func (a *AWSS3Service) getClient() (*s3.Client, error) {
-	err := generateToken(a.saml2AWSBin)
+func generateToken(saml2awsBin string) error {
+	cmd := exec.Command("sh", saml2awsBin)
+	err := cmd.Run()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to generate AWS token: %q", err)
+		return fmt.Errorf("Failed to run %q, err: %v", saml2awsBin, err)
 	}
+	return nil
+}
 
-	s3Client, err := createClient(a.samlProfile, a.samlRegion)
+func createClient(credsProfile, region string) (*s3.Client, error) {
+	var client *s3.Client
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion(region),
+		config.WithSharedConfigProfile(credsProfile))
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create S3 client: %q", err)
+		return client, fmt.Errorf("Failed to load SDK configuration: %v", err)
 	}
-	return s3Client, nil
+	return s3.NewFromConfig(cfg), nil
+}
+
+func (a *AWSS3Service) getClient() (*s3.Client, error) {
+	if a.client == nil || a.sessionIsExpired() {
+		err := generateToken(a.saml2AWSBin)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to generate AWS token: %q", err)
+		}
+
+		s3Client, err := createClient(a.samlProfile, a.samlRegion)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to create S3 client: %q", err)
+		}
+
+		a.sessionStart = time.Now()
+		a.client = s3Client
+	}
+	return a.client, nil
+}
+
+func (a *AWSS3Service) sessionIsExpired() bool {
+	if time.Since(a.sessionStart).Seconds() < a.sessionDuration {
+		return false
+	}
+	return true
 }
