@@ -176,7 +176,8 @@ func (a *AWSS3Service) getClient() (*s3.Client, error) {
 		if err != nil {
 			return nil, fmt.Errorf("Failed to generate AWS token: %q", err)
 		}
-
+		// saml2AWS returns without error, but without being fully setup, lets pause
+		time.Sleep(time.Minute)
 		s3Client, err := createClient(a.samlProfile, a.samlRegion)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to create S3 client: %q", err)
