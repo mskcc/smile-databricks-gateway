@@ -1,6 +1,6 @@
 module github.com/mskcc/smile-databricks-gateway
 
-go 1.22
+go 1.22.4
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.31.0
@@ -78,6 +78,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rs/zerolog v1.28.0 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
+	github.mskcc.org/cdsi/cdsi-protobuf/smile v0.0.0-20250224175738-fa4bf6902d0f // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.30.0 // indirect
@@ -97,7 +98,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
 	google.golang.org/api v0.182.0 // indirect
 	google.golang.org/genproto v0.0.0-20220617124728-180714bec0ad // indirect
-	google.golang.org/protobuf v1.34.2 // indirect
+	google.golang.org/protobuf v1.36.5 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gotest.tools/gotestsum v1.8.2 // indirect
 )

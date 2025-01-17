@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 
 	nm "github.com/mskcc/nats-messaging-go"
+	st "github.mskcc.org/cdsi/cdsi-protobuf/smile/generated/v1/go"
+	"google.golang.org/protobuf/proto"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -16,25 +19,32 @@ import (
 )
 
 type SmileService struct {
-	awsS3Service      *AWSS3Service
-	natsMessaging     *nm.Messaging
+	awsS3Service  *AWSS3Service
+	natsMessaging *nm.Messaging
 }
 
-type RequestAdapter struct {
+type IGORequestAdapter struct {
 	Requests []SmileRequest
 	Msg      *nm.Msg
 	SpanCtx  context.Context
 }
 
-type SampleAdapter struct {
+type IGOSampleAdapter struct {
 	Samples []SmileSample
 	Msg     *nm.Msg
 	SpanCtx context.Context
 }
 
+type TEMPOSampleAdapter struct {
+	Samples []*st.TempoSample
+	Msg     *nm.Msg
+	SpanCtx context.Context
+}
+
 const (
-	requestBufSize = 1
-	sampleBufSize  = 1
+	igoRequestBufSize  = 1
+	igoSampleBufSize   = 1
+	tempoSampleBufSize = 1
 )
 
 func NewSmileService(url, certPath, keyPath, consumer, password string, awsS3Service *AWSS3Service) (*SmileService, error) {
@@ -46,131 +56,185 @@ func NewSmileService(url, certPath, keyPath, consumer, password string, awsS3Ser
 }
 
 const (
-	newReqS3WriteMsg       = "Attempting to write new request into S3 bucket"
-	IGORequestIdKey        = "IGO Request ID"
-	newReqS3WriteErrMsg    = "Error writing new request into S3 bucket"
-	newReqS3WriteSucMsg    = "Successfully wrote new request into S3 bucket"
-	succProcessedNewReqMsg = "Successfully processed new request: %d"
-	newSampleS3WriteErrMsg = "Error writing new sample into S3 bucket"
-	newSampleS3WriteSucMsg = "Successfully wrote new sample into S3 bucket"
-	NumSamplesWrittenKey   = "Num Samples Written"
-	updateReqS3WriteMsg    = "Attempting to update a request in an S3 bucket"
-	upReqS3WriteErrMsg     = "Error updating request in an S3 bucket"
-	upReqS3WriteSucMsg     = "Successfully updated request in an S3 bucket"
-	succProcessedUpReqMsg  = "Successfully processed request update: %d"
-	SampleNameKey          = "Sample Name"
-	updateSampleS3WriteMsg = "Attempting to update a sample in an S3 bucket"
-	upSampleS3WriteErrMsg  = "Error updating sample in an S3 bucket"
-	upSampleS3WriteSucMsg  = "Successfully updated a sample in an S3 bucket"
-	succProcessedUpSampMsg = "Successfully processed sample update: %d"
-	errSlackNotifMsg       = "Error sending slack notification"
-	succSlackNotifMsg      = "Successfully sent slack notification"
+	newIGOReqS3WriteMsg       = "Attempting to write new IGO request into S3 bucket"
+	IGORequestIdKey           = "IGO Request ID"
+	newIGOReqS3WriteErrMsg    = "Error writing new IGO request into S3 bucket"
+	newIGOReqS3WriteSucMsg    = "Successfully wrote new IGO request into S3 bucket"
+	succProcessNewIGOReqMsg   = "Successfully processed new IGO request: %s"
+	newIGOSampleS3WriteErrMsg = "Error writing new IGO sample into S3 bucket"
+	newIGOSampleS3WriteSucMsg = "Successfully wrote new IGO sample into S3 bucket"
+	NumSamplesWrittenKey      = "Num Samples Written"
+	updateIGOReqS3WriteMsg    = "Attempting to update an IGO request in an S3 bucket"
+	upIGOReqS3WriteErrMsg     = "Error updating IGO request in an S3 bucket"
+	upIGOReqS3WriteSucMsg     = "Successfully updated IGO request in an S3 bucket"
+	succProcessedUpIGOReqMsg  = "Successfully processed IGO request update: %s"
+	IGOSampleNameKey          = "IGO Sample Name"
+	updateIGOSampleS3WriteMsg = "Attempting to update an IGO sample in an S3 bucket"
+	upIGOSampleS3WriteErrMsg  = "Error updating IGO sample in an S3 bucket"
+	upIGOSampleS3WriteSucMsg  = "Successfully updated an IGO sample in an S3 bucket"
+	succProcessedUpIGOSampMsg = "Successfully processed an IGO sample update: %s"
+
+	TEMPOReleasedWriteMsg             = "Attempting to write released TEMPO Samples into S3 bucket"
+	TEMPOReleasedSamplesS3WriteErrMsg = "Error writing released TEMPO sample into S3 bucket"
+	TEMPOReleasedSamplesS3WriteSucMsg = "Successfully wrote released TEMPO sample into S3 bucket"
+	succProcessTEMPOReleasedMsg       = "Successfully processed released TEMPO Samples"
+	TEMPOUpdatedWriteMsg              = "Attempting to write updated TEMPO Samples into S3 bucket"
+	TEMPOUpdatedSamplesS3WriteErrMsg  = "Error writing updated TEMPO sample into S3 bucket"
+	TEMPOUpdatedSamplesS3WriteSucMsg  = "Successfully wrote updated TEMPO sample into S3 bucket"
+	succProcessTEMPOUpdatedMsg        = "Successfully processed updated TEMPO Samples"
+	TEMPOSampleNamesKey               = "TEMPO Sample Names"
+	TEMPOSampleNameKey                = "TEMPO Sample Name"
+
+	errSlackNotifMsg  = "Error sending slack notification"
+	succSlackNotifMsg = "Successfully sent slack notification"
 )
 
-func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFilter, updateRequestFilter, updateSampleFilter string, tracer trace.Tracer, slackURL string) error {
-
-	newRequestChan := make(chan RequestAdapter, requestBufSize)
-	updateRequestChan := make(chan RequestAdapter, requestBufSize)
-	updateSampleChan := make(chan SampleAdapter, sampleBufSize)
-	err := ss.subscribeToService(ctx, newRequestChan, updateRequestChan, updateSampleChan,
-		consumer, subject, newRequestFilter, updateRequestFilter, updateSampleFilter, tracer)
+func (ss *SmileService) Run(ctx context.Context, consumer, subjectFilter, newIGORequestFilter, updateIGORequestFilter, updateIGOSampleFilter, igoAWSBucket, releaseTEMPOSamplesFilter, updateTEMPOSampleFilter, tempoAWSBucket string, tracer trace.Tracer, slackURL string) error {
+	newIGORequestChan := make(chan IGORequestAdapter, igoRequestBufSize)
+	updateIGORequestChan := make(chan IGORequestAdapter, igoRequestBufSize)
+	updateIGOSampleChan := make(chan IGOSampleAdapter, igoSampleBufSize)
+	releaseTEMPOSamplesChan := make(chan TEMPOSampleAdapter, tempoSampleBufSize)
+	updateTEMPOSamplesChan := make(chan TEMPOSampleAdapter, tempoSampleBufSize)
+	// a nats consumer can only have one subject filter when created, so we need to have a single event handler
+	err := ss.subscribeToSubjects(ctx, consumer, subjectFilter, newIGORequestChan, updateIGORequestChan, updateIGOSampleChan, newIGORequestFilter, updateIGORequestFilter, updateIGOSampleFilter,
+		releaseTEMPOSamplesChan, updateTEMPOSamplesChan, releaseTEMPOSamplesFilter, updateTEMPOSampleFilter, tracer)
 	if err != nil {
 		return err
 	}
 
-	var nrwg sync.WaitGroup
-	var urwg sync.WaitGroup
-	var uswg sync.WaitGroup
+	var nigorwg sync.WaitGroup
+	var uigorwg sync.WaitGroup
+	var uigoswg sync.WaitGroup
+	var trswg sync.WaitGroup
+	var tuswg sync.WaitGroup
 	for {
 		select {
-		case ra := <-newRequestChan:
-			nrCtx, nrSpan := tracer.Start(ra.SpanCtx, newReqS3WriteMsg)
+		case ra := <-newIGORequestChan:
+			nrCtx, nrSpan := tracer.Start(ra.SpanCtx, newIGOReqS3WriteMsg)
 			nrSpan.SetAttributes(attribute.String(IGORequestIdKey, ra.Requests[0].IgoRequestID))
-			nrwg.Add(1)
-			go func() {
-				defer nrwg.Done()
-				filename := fmt.Sprintf("%s_request.json", ra.Requests[0].IgoRequestID)
-				// pull samples out of request and persist them separately
-				samples := ra.Requests[0].Samples
-				ra.Requests[0].Samples = nil
-				err := ss.awsS3Service.PutRequest(filename, ra.Requests[0])
-				if handleError(err, newReqS3WriteErrMsg, nrSpan) {
-					return
-				}
-				for _, sample := range samples {
-					filename := fmt.Sprintf("%s_sample.json", sample.SampleName)
-					err := ss.awsS3Service.PutSample(filename, sample)
-					if handleError(err, newSampleS3WriteErrMsg, nrSpan) {
-						return
-					}
-					nrSpan.AddEvent(newSampleS3WriteSucMsg, trace.WithAttributes(attribute.String(SampleNameKey, sample.SampleName)))
-				}
-				nrSpan.SetAttributes(attribute.Int(NumSamplesWrittenKey, len(samples)))
-				nrSpan.AddEvent(newReqS3WriteSucMsg, trace.WithAttributes(attribute.String(IGORequestIdKey, ra.Requests[0].IgoRequestID), attribute.Int(NumSamplesWrittenKey, len(samples))))
-				ra.Msg.ProviderMsg.Ack()
-				mesg := fmt.Sprintf("{\"text\":\"New request written to Databricks S3 bucket:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
-				err = NotifyViaSlack(nrCtx, mesg, slackURL)
-				if handleError(err, errSlackNotifMsg, nrSpan) {
-					return
-				}
-				nrSpan.AddEvent(succSlackNotifMsg)
-				nrSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedNewReqMsg, ra.Requests[0].IgoRequestID))
-				nrSpan.End()
-			}()
-		case ra := <-updateRequestChan:
-			urCtx, urSpan := tracer.Start(ra.SpanCtx, updateReqS3WriteMsg)
+			nigorwg.Add(1)
+			go ss.processNewIGORequest(nrCtx, nigorwg, nrSpan, ra, igoAWSBucket, slackURL)
+		case ra := <-updateIGORequestChan:
+			urCtx, urSpan := tracer.Start(ra.SpanCtx, updateIGOReqS3WriteMsg)
 			urSpan.SetAttributes(attribute.String(IGORequestIdKey, ra.Requests[0].IgoRequestID))
-			urwg.Add(1)
-			go func() {
-				defer urwg.Done()
-				filename := fmt.Sprintf("%s_request.json", ra.Requests[0].IgoRequestID)
-				err := ss.awsS3Service.PutRequest(filename, ra.Requests[0])
-				if handleError(err, upReqS3WriteErrMsg, urSpan) {
-					return
-				}
-				urSpan.AddEvent(upReqS3WriteSucMsg)
-				ra.Msg.ProviderMsg.Ack()
-				mesg := fmt.Sprintf("{\"text\":\"Updated request written to Databricks S3 bucket:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
-				err = NotifyViaSlack(urCtx, mesg, slackURL)
-				if handleError(err, errSlackNotifMsg, urSpan) {
-					return
-				}
-				urSpan.AddEvent(succSlackNotifMsg)
-				urSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedUpReqMsg, ra.Requests[0].IgoRequestID))
-				urSpan.End()
-			}()
-		case sa := <-updateSampleChan:
-			usCtx, usSpan := tracer.Start(sa.SpanCtx, updateSampleS3WriteMsg)
+			uigorwg.Add(1)
+			go ss.processUpdateIGORequest(urCtx, uigorwg, urSpan, ra, igoAWSBucket, slackURL)
+		case sa := <-updateIGOSampleChan:
+			usCtx, usSpan := tracer.Start(sa.SpanCtx, updateIGOSampleS3WriteMsg)
 			usSpan.SetAttributes(attribute.String(IGORequestIdKey, sa.Samples[0].AdditionalProperties.IgoRequestID))
-			usSpan.SetAttributes(attribute.String(SampleNameKey, sa.Samples[0].SampleName))
-			uswg.Add(1)
-			go func() {
-				defer uswg.Done()
-				filename := fmt.Sprintf("%s_sample.json", sa.Samples[0].SampleName)
-				err := ss.awsS3Service.PutSample(filename, sa.Samples[0])
-				if handleError(err, upSampleS3WriteErrMsg, usSpan) {
-					return
-				}
-				usSpan.AddEvent(upSampleS3WriteSucMsg)
-				sa.Msg.ProviderMsg.Ack()
-				mesg := fmt.Sprintf("{\"text\":\"Updated sample written to Databricks S3 bucket:\n\tSample Name: %s\"}", sa.Samples[0].SampleName)
-				err = NotifyViaSlack(usCtx, mesg, slackURL)
-				if handleError(err, errSlackNotifMsg, usSpan) {
-					return
-				}
-				usSpan.AddEvent(succSlackNotifMsg)
-				usSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedUpSampMsg, sa.Samples[0].SampleName))
-				usSpan.End()
-			}()
+			usSpan.SetAttributes(attribute.String(IGOSampleNameKey, sa.Samples[0].SampleName))
+			uigoswg.Add(1)
+			go ss.processUpdateIGOSample(usCtx, uigoswg, usSpan, sa, igoAWSBucket, slackURL)
+		case tsa := <-releaseTEMPOSamplesChan:
+			tsaCtx, tsaSpan := tracer.Start(tsa.SpanCtx, TEMPOReleasedWriteMsg)
+			trswg.Add(1)
+			go ss.processTEMPOSamples(tsaCtx, trswg, tsaSpan, tsa, TEMPOReleasedSamplesS3WriteErrMsg, TEMPOReleasedSamplesS3WriteSucMsg, succProcessTEMPOReleasedMsg, tempoAWSBucket, slackURL)
+		case tsa := <-updateTEMPOSamplesChan:
+			tsaCtx, tsaSpan := tracer.Start(tsa.SpanCtx, TEMPOUpdatedWriteMsg)
+			tuswg.Add(1)
+			go ss.processTEMPOSamples(tsaCtx, tuswg, tsaSpan, tsa, TEMPOUpdatedSamplesS3WriteErrMsg, TEMPOUpdatedSamplesS3WriteSucMsg, succProcessTEMPOUpdatedMsg, tempoAWSBucket, slackURL)
 		case <-ctx.Done():
 			log.Println("Context canceled, returning...")
-			nrwg.Wait()
-			urwg.Wait()
-			uswg.Wait()
+			nigorwg.Wait()
+			uigorwg.Wait()
+			uigoswg.Wait()
+			trswg.Wait()
+			tuswg.Wait()
 			ss.natsMessaging.Shutdown()
 			return nil
 		}
 	}
+}
+
+func (ss *SmileService) processNewIGORequest(nrCtx context.Context, nigorwg sync.WaitGroup, nrSpan trace.Span, ra IGORequestAdapter, igoAWSBucket, slackURL string) {
+	defer nigorwg.Done()
+	filename := fmt.Sprintf("%s_request.json", ra.Requests[0].IgoRequestID)
+	// pull samples out of request and persist them separately
+	samples := ra.Requests[0].Samples
+	ra.Requests[0].Samples = nil
+	err := ss.awsS3Service.PutRequest(filename, igoAWSBucket, ra.Requests[0])
+	if handleError(err, newIGOReqS3WriteErrMsg, nrSpan) {
+		return
+	}
+	for _, sample := range samples {
+		filename := fmt.Sprintf("%s_sample.json", sample.SampleName)
+		err := ss.awsS3Service.PutIGOSample(filename, igoAWSBucket, sample)
+		if handleError(err, newIGOSampleS3WriteErrMsg, nrSpan) {
+			return
+		}
+		nrSpan.AddEvent(newIGOSampleS3WriteSucMsg, trace.WithAttributes(attribute.String(IGOSampleNameKey, sample.SampleName)))
+	}
+	nrSpan.SetAttributes(attribute.Int(NumSamplesWrittenKey, len(samples)))
+	nrSpan.AddEvent(newIGOReqS3WriteSucMsg, trace.WithAttributes(attribute.String(IGORequestIdKey, ra.Requests[0].IgoRequestID), attribute.Int(NumSamplesWrittenKey, len(samples))))
+	ra.Msg.ProviderMsg.Ack()
+	mesg := fmt.Sprintf("{\"text\":\"New IGO request written to Databricks S3 bucket:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
+	err = NotifyViaSlack(nrCtx, mesg, slackURL)
+	if handleError(err, errSlackNotifMsg, nrSpan) {
+		return
+	}
+	nrSpan.AddEvent(succSlackNotifMsg)
+	nrSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessNewIGOReqMsg, ra.Requests[0].IgoRequestID))
+	nrSpan.End()
+}
+
+func (ss *SmileService) processUpdateIGORequest(urCtx context.Context, uigorwg sync.WaitGroup, urSpan trace.Span, ra IGORequestAdapter, igoAWSBucket, slackURL string) {
+	defer uigorwg.Done()
+	filename := fmt.Sprintf("%s_request.json", ra.Requests[0].IgoRequestID)
+	err := ss.awsS3Service.PutRequest(filename, igoAWSBucket, ra.Requests[0])
+	if handleError(err, upIGOReqS3WriteErrMsg, urSpan) {
+		return
+	}
+	urSpan.AddEvent(upIGOReqS3WriteSucMsg)
+	ra.Msg.ProviderMsg.Ack()
+	mesg := fmt.Sprintf("{\"text\":\"Updated IGO request written to Databricks S3 bucket:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
+	err = NotifyViaSlack(urCtx, mesg, slackURL)
+	if handleError(err, errSlackNotifMsg, urSpan) {
+		return
+	}
+	urSpan.AddEvent(succSlackNotifMsg)
+	urSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedUpIGOReqMsg, ra.Requests[0].IgoRequestID))
+	urSpan.End()
+}
+
+func (ss *SmileService) processUpdateIGOSample(usCtx context.Context, uigoswg sync.WaitGroup, usSpan trace.Span, sa IGOSampleAdapter, igoAWSBucket, slackURL string) {
+	defer uigoswg.Done()
+	filename := fmt.Sprintf("%s_sample.json", sa.Samples[0].SampleName)
+	err := ss.awsS3Service.PutIGOSample(filename, igoAWSBucket, sa.Samples[0])
+	if handleError(err, upIGOSampleS3WriteErrMsg, usSpan) {
+		return
+	}
+	usSpan.AddEvent(upIGOSampleS3WriteSucMsg)
+	sa.Msg.ProviderMsg.Ack()
+	mesg := fmt.Sprintf("{\"text\":\"Updated IGO sample written to Databricks S3 bucket:\n\tSample Name: %s\"}", sa.Samples[0].SampleName)
+	err = NotifyViaSlack(usCtx, mesg, slackURL)
+	if handleError(err, errSlackNotifMsg, usSpan) {
+		return
+	}
+	usSpan.AddEvent(succSlackNotifMsg)
+	usSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedUpIGOSampMsg, sa.Samples[0].SampleName))
+	usSpan.End()
+}
+
+func (ss *SmileService) processTEMPOSamples(tsaCtx context.Context, tsawg sync.WaitGroup, tsaSpan trace.Span, tsa TEMPOSampleAdapter, samplePutErrMsg, samplePutSucMsg, sucProcessMsg, tempoAWSBucket, slackURL string) {
+	defer tsawg.Done()
+	for _, sample := range tsa.Samples {
+		filename := fmt.Sprintf("%s_clinical.json", sample.PrimaryId)
+		err := ss.awsS3Service.PutTEMPOSample(filename, tempoAWSBucket, *sample)
+		if handleError(err, samplePutErrMsg, tsaSpan) {
+			return
+		}
+		tsaSpan.AddEvent(samplePutSucMsg, trace.WithAttributes(attribute.String(TEMPOSampleNameKey, sample.PrimaryId)))
+	}
+	tsaSpan.SetAttributes(attribute.Int(NumSamplesWrittenKey, len(tsa.Samples)))
+	tsa.Msg.ProviderMsg.Ack()
+	mesg := fmt.Sprintf("{\"text\":\"TEMPO samples written to Databricks S3 bucket:\n\t%s: %s\"}", TEMPOSampleNamesKey, tsa.Samples)
+	err := NotifyViaSlack(tsaCtx, mesg, slackURL)
+	if handleError(err, errSlackNotifMsg, tsaSpan) {
+		return
+	}
+	tsaSpan.AddEvent(succSlackNotifMsg)
+	tsaSpan.SetStatus(codes.Ok, fmt.Sprintf(sucProcessMsg))
+	tsaSpan.End()
 }
 
 const (
@@ -188,11 +252,21 @@ const (
 
 	handingOffRequestToRunLoopMsg = "Handing off request for writing to S3 bucket connected to Databricks"
 	handingOffSampleToRunLoopMsg  = "Handing off sample for writing to an S3 bucket connected to Databricks"
+
+	incomingReleaseTEMPOSamplesMsg      = "Received release TEMPO samples message"
+	processingReleaseTEMPOSamplesErrMsg = "Error unmarshaling release TEMPO samples message"
+	processingReleaseTEMPOSamplesSucMsg = "Successfully unmarshaled release TEMPO samples message"
+
+	incomingUpTEMPOSamplesMsg      = "Received TEMPO sample update"
+	processingUpTEMPOSamplesErrMsg = "Error unmarshaling TEMPO sample updates"
+	processingUpTEMPOSamplesSucMsg = "Successfully unmarshaled TEMPO sample updates"
+
+	handingOffTEMPOSamplesToRunLoopMsg = "Handing off TEMPO samples for writing to S3 bucket connected to Databricks"
 )
 
-func (ss *SmileService) subscribeToService(ctx context.Context, newRequestCh, upRequestCh chan RequestAdapter, upSampleCh chan SampleAdapter,
-	consumer, subject, newRequestFilter, updateRequestFilter, updateSampleFilter string, tracer trace.Tracer) error {
-	err := ss.natsMessaging.Subscribe(consumer, subject, func(m *nm.Msg) {
+func (ss *SmileService) subscribeToSubjects(ctx context.Context, consumer, subjectFilter string, newRequestCh, upRequestCh chan IGORequestAdapter, upSampleCh chan IGOSampleAdapter, newRequestFilter, updateRequestFilter, updateSampleFilter string,
+	releaseTEMPOSamplesCh, updateTEMPOSampleCh chan TEMPOSampleAdapter, releaseTEMPOSamplesFilter, updateTEMPOSampleFilter string, tracer trace.Tracer) error {
+	err := ss.natsMessaging.Subscribe(consumer, subjectFilter, func(m *nm.Msg) {
 		switch {
 		case m.Subject == newRequestFilter:
 			subscribeCtx, nrSpan := tracer.Start(ctx, incomingNewReqMsg)
@@ -203,7 +277,7 @@ func (ss *SmileService) subscribeToService(ctx context.Context, newRequestCh, up
 			nrSpan.AddEvent(processingNewReqSucMsg, trace.WithAttributes(attribute.String(IGORequestIdKey, nr.IgoRequestID)))
 			nrSpan.AddEvent(handingOffRequestToRunLoopMsg, trace.WithAttributes(attribute.String(IGORequestIdKey, nr.IgoRequestID)))
 			nrSpan.End()
-			newRequestCh <- RequestAdapter{[]SmileRequest{nr}, m, subscribeCtx}
+			newRequestCh <- IGORequestAdapter{[]SmileRequest{nr}, m, subscribeCtx}
 		case m.Subject == updateRequestFilter:
 			subscribeCtx, urSpan := tracer.Start(ctx, incomingUpReqMsg)
 			ru, err := unMarshal[[]SmileRequest](string(m.Data))
@@ -213,23 +287,54 @@ func (ss *SmileService) subscribeToService(ctx context.Context, newRequestCh, up
 			urSpan.AddEvent(processingUpReqSucMsg, trace.WithAttributes(attribute.String(IGORequestIdKey, ru[0].IgoRequestID)))
 			urSpan.AddEvent(handingOffRequestToRunLoopMsg, trace.WithAttributes(attribute.String(IGORequestIdKey, ru[0].IgoRequestID)))
 			urSpan.End()
-			upRequestCh <- RequestAdapter{ru, m, subscribeCtx}
+			upRequestCh <- IGORequestAdapter{ru, m, subscribeCtx}
 		case m.Subject == updateSampleFilter:
 			subscribeCtx, usSpan := tracer.Start(ctx, incomingUpSampMsg)
 			su, err := unMarshal[[]SmileSample](string(m.Data))
 			if handleError(err, processingUpSampErrMsg, usSpan) {
 				break
 			}
-			usSpan.AddEvent(processingUpSampSucMsg, trace.WithAttributes(attribute.String(SampleNameKey, su[0].SampleName)))
-			usSpan.AddEvent(handingOffSampleToRunLoopMsg, trace.WithAttributes(attribute.String(SampleNameKey, su[0].SampleName)))
+			usSpan.AddEvent(processingUpSampSucMsg, trace.WithAttributes(attribute.String(IGOSampleNameKey, su[0].SampleName)))
+			usSpan.AddEvent(handingOffSampleToRunLoopMsg, trace.WithAttributes(attribute.String(IGOSampleNameKey, su[0].SampleName)))
 			usSpan.End()
-			upSampleCh <- SampleAdapter{su, m, subscribeCtx}
+			upSampleCh <- IGOSampleAdapter{su, m, subscribeCtx}
+		case m.Subject == releaseTEMPOSamplesFilter:
+			subscribeCtx, rtsSpan := tracer.Start(ctx, incomingReleaseTEMPOSamplesMsg)
+			tempoSamples, err := protoUnMarshal(m.Data)
+			if handleError(err, processingReleaseTEMPOSamplesErrMsg, rtsSpan) {
+				break
+			}
+			rtsSpan.AddEvent(processingReleaseTEMPOSamplesSucMsg, trace.WithAttributes(attribute.String(TEMPOSampleNamesKey, buildStringFromTEMPOSamples(tempoSamples))))
+			rtsSpan.AddEvent(handingOffTEMPOSamplesToRunLoopMsg, trace.WithAttributes(attribute.String(TEMPOSampleNamesKey, buildStringFromTEMPOSamples(tempoSamples))))
+			rtsSpan.End()
+			releaseTEMPOSamplesCh <- TEMPOSampleAdapter{tempoSamples, m, subscribeCtx}
+		case m.Subject == updateTEMPOSampleFilter:
+			subscribeCtx, utsSpan := tracer.Start(ctx, incomingUpTEMPOSamplesMsg)
+			tempoSamples, err := protoUnMarshal(m.Data)
+			if handleError(err, processingUpTEMPOSamplesErrMsg, utsSpan) {
+				break
+			}
+			utsSpan.AddEvent(processingUpTEMPOSamplesSucMsg, trace.WithAttributes(attribute.String(TEMPOSampleNamesKey, buildStringFromTEMPOSamples(tempoSamples))))
+			utsSpan.AddEvent(handingOffTEMPOSamplesToRunLoopMsg, trace.WithAttributes(attribute.String(TEMPOSampleNamesKey, buildStringFromTEMPOSamples(tempoSamples))))
+			utsSpan.End()
+			updateTEMPOSampleCh <- TEMPOSampleAdapter{tempoSamples, m, subscribeCtx}
 		default:
 			// not interested in message, Ack it so we don't get it again
 			m.ProviderMsg.Ack()
 		}
 	})
 	return err
+}
+
+func buildStringFromTEMPOSamples(tempoSamples []*st.TempoSample) string {
+	var builder strings.Builder
+	for lc, tempoSample := range tempoSamples {
+		if lc > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString(tempoSample.CmoSampleName)
+	}
+	return builder.String()
 }
 
 func unMarshal[T any](msgData string) (T, error) {
@@ -242,6 +347,14 @@ func unMarshal[T any](msgData string) (T, error) {
 		return target, err
 	}
 	return target, nil
+}
+
+func protoUnMarshal(data []byte) ([]*st.TempoSample, error) {
+	var tempoSamples st.TempoSampleUpdateMessage
+	if err := proto.Unmarshal(data, &tempoSamples); err != nil {
+		return tempoSamples.TempoSamples, err
+	}
+	return tempoSamples.TempoSamples, nil
 }
 
 func handleError(err error, message string, span trace.Span) bool {
