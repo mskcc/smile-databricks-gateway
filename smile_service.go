@@ -17,7 +17,6 @@ import (
 
 type SmileService struct {
 	awsS3Service      *AWSS3Service
-	databricksService *DatabricksService
 	natsMessaging     *nm.Messaging
 }
 
@@ -38,12 +37,12 @@ const (
 	sampleBufSize  = 1
 )
 
-func NewSmileService(url, certPath, keyPath, consumer, password string, awsS3Service *AWSS3Service, databricksService *DatabricksService) (*SmileService, error) {
+func NewSmileService(url, certPath, keyPath, consumer, password string, awsS3Service *AWSS3Service) (*SmileService, error) {
 	natsMessaging, err := nm.NewSecureMessaging(url, certPath, keyPath, consumer, password)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create a nats messaging client: %q", err)
 	}
-	return &SmileService{awsS3Service: awsS3Service, databricksService: databricksService, natsMessaging: natsMessaging}, nil
+	return &SmileService{awsS3Service: awsS3Service, natsMessaging: natsMessaging}, nil
 }
 
 const (
@@ -64,14 +63,11 @@ const (
 	upSampleS3WriteErrMsg  = "Error updating sample in an S3 bucket"
 	upSampleS3WriteSucMsg  = "Successfully updated a sample in an S3 bucket"
 	succProcessedUpSampMsg = "Successfully processed sample update: %d"
-	execDLTPipelineErrMsg  = "Unsuccessfully executed DLT pipeline"
-	execDLTPipelineSucMsg  = "Successfully executed DLT pipeline"
-	DLTPipelineNameKey     = "DLT Pipeline Name"
 	errSlackNotifMsg       = "Error sending slack notification"
 	succSlackNotifMsg      = "Successfully sent slack notification"
 )
 
-func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFilter, updateRequestFilter, updateSampleFilter string, tracer trace.Tracer, slackURL, dltPipelineName string) error {
+func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFilter, updateRequestFilter, updateSampleFilter string, tracer trace.Tracer, slackURL string) error {
 
 	newRequestChan := make(chan RequestAdapter, requestBufSize)
 	updateRequestChan := make(chan RequestAdapter, requestBufSize)
@@ -112,12 +108,7 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				nrSpan.SetAttributes(attribute.Int(NumSamplesWrittenKey, len(samples)))
 				nrSpan.AddEvent(newReqS3WriteSucMsg, trace.WithAttributes(attribute.String(IGORequestIdKey, ra.Requests[0].IgoRequestID), attribute.Int(NumSamplesWrittenKey, len(samples))))
 				ra.Msg.ProviderMsg.Ack()
-				err = ss.databricksService.ExecutePipeline(nrCtx)
-				if handleError(err, execDLTPipelineErrMsg, nrSpan) {
-					return
-				}
-				nrSpan.AddEvent(execDLTPipelineSucMsg, trace.WithAttributes(attribute.String(DLTPipelineNameKey, dltPipelineName)))
-				mesg := fmt.Sprintf("{\"text\":\"New request written to Databricks:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
+				mesg := fmt.Sprintf("{\"text\":\"New request written to Databricks S3 bucket:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
 				err = NotifyViaSlack(nrCtx, mesg, slackURL)
 				if handleError(err, errSlackNotifMsg, nrSpan) {
 					return
@@ -139,12 +130,7 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				}
 				urSpan.AddEvent(upReqS3WriteSucMsg)
 				ra.Msg.ProviderMsg.Ack()
-				err = ss.databricksService.ExecutePipeline(urCtx)
-				if handleError(err, execDLTPipelineErrMsg, urSpan) {
-					return
-				}
-				urSpan.AddEvent(execDLTPipelineSucMsg, trace.WithAttributes(attribute.String(DLTPipelineNameKey, dltPipelineName)))
-				mesg := fmt.Sprintf("{\"text\":\"Updated request written to Databricks:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
+				mesg := fmt.Sprintf("{\"text\":\"Updated request written to Databricks S3 bucket:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
 				err = NotifyViaSlack(urCtx, mesg, slackURL)
 				if handleError(err, errSlackNotifMsg, urSpan) {
 					return
@@ -167,12 +153,7 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subject, newRequestFi
 				}
 				usSpan.AddEvent(upSampleS3WriteSucMsg)
 				sa.Msg.ProviderMsg.Ack()
-				err = ss.databricksService.ExecutePipeline(usCtx)
-				if handleError(err, execDLTPipelineErrMsg, usSpan) {
-					return
-				}
-				usSpan.AddEvent(execDLTPipelineSucMsg, trace.WithAttributes(attribute.String(DLTPipelineNameKey, dltPipelineName)))
-				mesg := fmt.Sprintf("{\"text\":\"Updated sample written to Databricks:\n\tSample Name: %s\"}", sa.Samples[0].SampleName)
+				mesg := fmt.Sprintf("{\"text\":\"Updated sample written to Databricks S3 bucket:\n\tSample Name: %s\"}", sa.Samples[0].SampleName)
 				err = NotifyViaSlack(usCtx, mesg, slackURL)
 				if handleError(err, errSlackNotifMsg, usSpan) {
 					return

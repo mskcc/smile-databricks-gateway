@@ -1,11 +1,6 @@
 package smile_databricks_gateway
 
 type Config struct {
-	DBHostname         string  `docopt:"--host"`
-	DBToken            string  `docopt:"--dbtoken"`
-	DBTokenComment     string  `docopt:"--dbtokencomment"`
-	DBHttpPath         string  `docopt:"--dbhttppath"`
-	DLTPipelineName    string  `docopt:"--dltpipelinename"`
 	MomUrl             string  `docopt:"--momurl"`
 	MomCert            string  `docopt:"--momcert"`
 	MomKey             string  `docopt:"--momkey"`
@@ -27,11 +22,6 @@ type Config struct {
 }
 
 var TestConfig = Config{
-	DBHostname:      "",
-	DBToken:         "",
-	DBTokenComment:  "",
-	DBHttpPath:      "",
-	DLTPipelineName: "",
 	SAML2AWSBin:     "",
 	SAMLProfile:     "",
 	SAMLRegion:      "",

@@ -16,12 +16,7 @@ const usage = `smile-databricks-gateway.
 
 Usage:
   smile-databricks-gateway -h | --help
-  smile-databricks-gateway --host=<hostname>
-                           --dbtoken=<token>
-                           --dbtokencomment=<comment>
-                           --dbhttppath=<path>
-                           --dltpipelinename=<dltpipelinename>
-                           --momurl=<momurl>
+  smile-databricks-gateway --momurl=<momurl>
                            --momcert=<momcert>
                            --momkey=<momkey>
                            --momcons=<momcons>
@@ -41,11 +36,6 @@ Usage:
                            --awssessionduration=<duration>
 Options:
   -h --help                           Show this screen.
-  --host=<hostname>                   Databricks hostname.
-  --dbtoken=<token>                   Databricks personal access token.
-  --dbtokencomment=<comment>          Databricks personal access token comment.
-  --dbhttppath=<path>                 The HTTP path to the Databricks SQL Warehouse.
-  --dltpipelinename=<dltpipelinename> The name of the delta live table pipeline to be executed after json files are added to volume.
   --momurl=<momurl>                   The messaging system URL.
   --momcert=<momcert>                 The messaging system certificate.
   --momkey=<momkey>                   The messaging system cert key.
@@ -104,15 +94,12 @@ func main() {
 	defer shutdownTracer()
 	tracer := otel.Tracer(config.DatadogServiceName + "-tracer")
 
-	databricksService, err := sdg.NewDatabricksService(config.DBHostname, config.DBToken, config.DLTPipelineName)
-	handleError(err, "Databricks service cannot be created")
-
 	awsS3Service := sdg.NewAWSS3Service(config.SAML2AWSBin, config.SAMLProfile, config.SAMLRegion, config.AWSDestBucket, config.AWSSessionDuration)
 
 	// setup smile service
-	smileService, err := sdg.NewSmileService(config.MomUrl, config.MomCert, config.MomKey, config.MomCons, config.MomPw, awsS3Service, databricksService)
+	smileService, err := sdg.NewSmileService(config.MomUrl, config.MomCert, config.MomKey, config.MomCons, config.MomPw, awsS3Service)
 	handleError(err, "SMILE Service cannot be created")
-	if err := smileService.Run(ctx, config.MomCons, config.MomSub, config.MomNrf, config.MomUrf, config.MomUsf, tracer, config.SlackURL, config.DLTPipelineName); err != nil {
+	if err := smileService.Run(ctx, config.MomCons, config.MomSub, config.MomNrf, config.MomUrf, config.MomUsf, tracer, config.SlackURL); err != nil {
 		os.Exit(1)
 	}
 	log.Println("Exiting SMILE Databricks Gateway...")
