@@ -10,6 +10,8 @@ type Config struct {
 	MomNrf             string  `docopt:"--momnrf"`
 	MomUrf             string  `docopt:"--momurf"`
 	MomUsf             string  `docopt:"--momusf"`
+	Momrsf             string  `docopt:"--momrsf"`
+	Momuef             string  `docopt:"--momuef"`
 	OTELTracerHost     string  `docopt:"--tracerhost"`
 	OTELTracerPort     int     `docopt:"--tracerport"`
 	DatadogServiceName string  `docopt:"--ddservicename"`
@@ -17,14 +19,15 @@ type Config struct {
 	SAML2AWSBin        string  `docopt:"--saml2aws"`
 	SAMLProfile        string  `docopt:"--saml2profile"`
 	SAMLRegion         string  `docopt:"--saml2region"`
-	AWSDestBucket      string  `docopt:"--awsdestbucket"`
+	IGOAWSBucket       string  `docopt:"--igoawsbucket"`
+	TEMPOAWSBucket     string  `docopt:"--tempoawsbucket"`
 	AWSSessionDuration float64 `docopt:"--awssessionduration"`
 }
 
 var TestConfig = Config{
-	SAML2AWSBin:     "",
-	SAMLProfile:     "",
-	SAMLRegion:      "",
-	AWSDestBucket:   "",
+	SAML2AWSBin:        "",
+	SAMLProfile:        "",
+	SAMLRegion:         "",
+	IGOAWSBucket:       "",
 	AWSSessionDuration: 3600.0,
 }
