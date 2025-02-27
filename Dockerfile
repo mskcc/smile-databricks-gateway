@@ -1,7 +1,14 @@
 # syntax=docker/dockerfile:1
 
 # official go image has all necessary tools and libs to compile/run go app
-FROM golang:alpine AS build-stage
+FROM golang:1.24.0 AS build-stage
+
+ENV GOPRIVATE=github.mskcc.org/*
+
+ARG GITHUB_TOKEN
+ENV GITHUB_TOKEN=${GITHUB_TOKEN}
+
+RUN git config --global url."https://${GITHUB_TOKEN}@github.mskcc.org/".insteadOf "https://github.mskcc.org/"
 
 # set destination for copy commands
 WORKDIR /smile-databricks-gateway
@@ -18,7 +25,7 @@ COPY *.go .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 cd ./cmd/cli && go build -o /sdg
 
 # Deploy the application binary into a lean image
-FROM golang:alpine AS build-release-stage
+FROM golang:1.24.0 AS build-release-stage
 
 WORKDIR /
 

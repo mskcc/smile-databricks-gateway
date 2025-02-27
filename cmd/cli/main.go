@@ -45,11 +45,11 @@ Options:
   --momcons=<momcons>                 The messaging system consumer (id)
   --mompw=<mompw>                     The messaging system consumer pw.
   --momsub=<momsub>                   The messaging system subject filter.
-  --momnrf<momnrf>                    The messaging system new request topic filter.
-  --momurf<momurf>                    The messaging system update request topic filter.
-  --momusf<momusf>                    The messaging system update sample topic filter.
-  --momrsf<momrsf>                    The messaging system release tempo samples topic filter.
-  --momuef<momuef>                    The messaging system update tempo sample embargo topic filter.
+  --momnrf=<momnrf>                   The messaging system new request topic filter.
+  --momurf=<momurf>                   The messaging system update request topic filter.
+  --momusf=<momusf>                   The messaging system update sample topic filter.
+  --momrsf=<momrsf>                   The messaging system release tempo samples topic filter.
+  --momuef=<momuef>                   The messaging system update tempo sample embargo topic filter.
   --tracerhost=<hostname>             OTel Tracer hostname.
   --tracerport=<port>                 OTel Tracer port.
   --ddservicename=<name>              Datadog service name.
@@ -105,7 +105,7 @@ func main() {
 	// setup smile service
 	smileService, err := sdg.NewSmileService(config.MomUrl, config.MomCert, config.MomKey, config.MomCons, config.MomPw, awsS3Service)
 	handleError(err, "SMILE Service cannot be created")
-	if err := smileService.Run(ctx, config.MomCons, config.MomSub, config.MomNrf, config.MomUrf, config.MomUsf, config.IGOAWSBucket, config.Momrsf, config.Momuef, config.TEMPOAWSBucket, tracer, config.SlackURL); err != nil {
+	if err := smileService.Run(ctx, config.MomCons, config.MomSub, config.MomNrf, config.MomUrf, config.MomUsf, config.IGOAWSBucket, config.MomRsf, config.MomUef, config.TEMPOAWSBucket, tracer, config.SlackURL); err != nil {
 		os.Exit(1)
 	}
 	log.Println("Exiting SMILE Databricks Gateway...")

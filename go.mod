@@ -78,7 +78,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rs/zerolog v1.28.0 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
-	github.mskcc.org/cdsi/cdsi-protobuf/smile v0.0.0-20250224175738-fa4bf6902d0f // indirect
+	github.mskcc.org/cdsi/cdsi-protobuf/smile v0.0.0-20250227200526-27fa8fb70e27 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.30.0 // indirect

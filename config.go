@@ -10,8 +10,8 @@ type Config struct {
 	MomNrf             string  `docopt:"--momnrf"`
 	MomUrf             string  `docopt:"--momurf"`
 	MomUsf             string  `docopt:"--momusf"`
-	Momrsf             string  `docopt:"--momrsf"`
-	Momuef             string  `docopt:"--momuef"`
+	MomRsf             string  `docopt:"--momrsf"`
+	MomUef             string  `docopt:"--momuef"`
 	OTELTracerHost     string  `docopt:"--tracerhost"`
 	OTELTracerPort     int     `docopt:"--tracerport"`
 	DatadogServiceName string  `docopt:"--ddservicename"`
