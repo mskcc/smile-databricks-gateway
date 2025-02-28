@@ -157,12 +157,12 @@ func (ss *SmileService) processNewIGORequest(nrCtx context.Context, nigorwg sync
 		return
 	}
 	for _, sample := range samples {
-		filename := fmt.Sprintf("%s_sample.json", sample.SampleName)
+		filename := fmt.Sprintf("%s_sample.json", sample.PrimaryID)
 		err := ss.awsS3Service.PutIGOSample(filename, igoAWSBucket, sample)
 		if handleError(err, newIGOSampleS3WriteErrMsg, nrSpan) {
 			return
 		}
-		nrSpan.AddEvent(newIGOSampleS3WriteSucMsg, trace.WithAttributes(attribute.String(IGOSampleNameKey, sample.SampleName)))
+		nrSpan.AddEvent(newIGOSampleS3WriteSucMsg, trace.WithAttributes(attribute.String(IGOSampleNameKey, sample.PrimaryID)))
 	}
 	nrSpan.SetAttributes(attribute.Int(NumSamplesWrittenKey, len(samples)))
 	nrSpan.AddEvent(newIGOReqS3WriteSucMsg, trace.WithAttributes(attribute.String(IGORequestIdKey, ra.Requests[0].IgoRequestID), attribute.Int(NumSamplesWrittenKey, len(samples))))
@@ -179,39 +179,43 @@ func (ss *SmileService) processNewIGORequest(nrCtx context.Context, nigorwg sync
 
 func (ss *SmileService) processUpdateIGORequest(urCtx context.Context, uigorwg sync.WaitGroup, urSpan trace.Span, ra IGORequestAdapter, igoAWSBucket, slackURL string) {
 	defer uigorwg.Done()
-	filename := fmt.Sprintf("%s_request.json", ra.Requests[0].IgoRequestID)
-	err := ss.awsS3Service.PutRequest(filename, igoAWSBucket, ra.Requests[0])
+	// last request is most recently updated
+	indLast := len(ra.Requests) - 1
+	filename := fmt.Sprintf("%s_request.json", ra.Requests[indLast].IgoRequestID)
+	err := ss.awsS3Service.PutRequest(filename, igoAWSBucket, ra.Requests[indLast])
 	if handleError(err, upIGOReqS3WriteErrMsg, urSpan) {
 		return
 	}
 	urSpan.AddEvent(upIGOReqS3WriteSucMsg)
 	ra.Msg.ProviderMsg.Ack()
-	mesg := fmt.Sprintf("{\"text\":\"Updated IGO request written to Databricks S3 bucket:\n\tRequest Id: %s\"}", ra.Requests[0].IgoRequestID)
+	mesg := fmt.Sprintf("{\"text\":\"Updated IGO request written to Databricks S3 bucket:\n\tRequest Id: %s\"}", ra.Requests[indLast].IgoRequestID)
 	err = NotifyViaSlack(urCtx, mesg, slackURL)
 	if handleError(err, errSlackNotifMsg, urSpan) {
 		return
 	}
 	urSpan.AddEvent(succSlackNotifMsg)
-	urSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedUpIGOReqMsg, ra.Requests[0].IgoRequestID))
+	urSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedUpIGOReqMsg, ra.Requests[indLast].IgoRequestID))
 	urSpan.End()
 }
 
 func (ss *SmileService) processUpdateIGOSample(usCtx context.Context, uigoswg sync.WaitGroup, usSpan trace.Span, sa IGOSampleAdapter, igoAWSBucket, slackURL string) {
 	defer uigoswg.Done()
-	filename := fmt.Sprintf("%s_sample.json", sa.Samples[0].SampleName)
-	err := ss.awsS3Service.PutIGOSample(filename, igoAWSBucket, sa.Samples[0])
+	// last sample is most recently updated
+	indLast := len(sa.Samples) - 1
+	filename := fmt.Sprintf("%s_sample.json", sa.Samples[indLast].PrimaryID)
+	err := ss.awsS3Service.PutIGOSample(filename, igoAWSBucket, sa.Samples[indLast])
 	if handleError(err, upIGOSampleS3WriteErrMsg, usSpan) {
 		return
 	}
 	usSpan.AddEvent(upIGOSampleS3WriteSucMsg)
 	sa.Msg.ProviderMsg.Ack()
-	mesg := fmt.Sprintf("{\"text\":\"Updated IGO sample written to Databricks S3 bucket:\n\tSample Name: %s\"}", sa.Samples[0].SampleName)
+	mesg := fmt.Sprintf("{\"text\":\"Updated IGO sample written to Databricks S3 bucket:\n\tSample Name: %s\"}", sa.Samples[indLast].PrimaryID)
 	err = NotifyViaSlack(usCtx, mesg, slackURL)
 	if handleError(err, errSlackNotifMsg, usSpan) {
 		return
 	}
 	usSpan.AddEvent(succSlackNotifMsg)
-	usSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedUpIGOSampMsg, sa.Samples[0].SampleName))
+	usSpan.SetStatus(codes.Ok, fmt.Sprintf(succProcessedUpIGOSampMsg, sa.Samples[indLast].PrimaryID))
 	usSpan.End()
 }
 
