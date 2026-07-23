@@ -121,7 +121,11 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subjectFilter, newIGO
 			go ss.processUpdateIGORequest(urCtx, uigorwg, urSpan, ra, igoAWSBucket, slackURL)
 		case sa := <-updateIGOSampleChan:
 			usCtx, usSpan := tracer.Start(sa.SpanCtx, updateIGOSampleS3WriteMsg)
-			usSpan.SetAttributes(attribute.String(IGORequestIdKey, sa.Samples[0].AdditionalProperties.IgoRequestID))
+			igoRequestID := ""
+			if sa.Samples[0].AdditionalProperties != nil {
+				igoRequestID = sa.Samples[0].AdditionalProperties.IgoRequestID
+			}
+			usSpan.SetAttributes(attribute.String(IGORequestIdKey, igoRequestID))
 			usSpan.SetAttributes(attribute.String(IGOSampleNameKey, sa.Samples[0].SampleName))
 			uigoswg.Add(1)
 			go ss.processUpdateIGOSample(usCtx, uigoswg, usSpan, sa, igoAWSBucket, slackURL)
@@ -294,14 +298,15 @@ func (ss *SmileService) subscribeToSubjects(ctx context.Context, consumer, subje
 			upRequestCh <- IGORequestAdapter{ru, m, subscribeCtx}
 		case m.Subject == updateSampleFilter:
 			subscribeCtx, usSpan := tracer.Start(ctx, incomingUpSampMsg)
-			su, err := unMarshal[[]SmileSample](string(m.Data))
+			sm, err := unMarshal[SmileSampleUpdateMessage](string(m.Data))
 			if handleError(err, processingUpSampErrMsg, usSpan) {
 				break
 			}
-			usSpan.AddEvent(processingUpSampSucMsg, trace.WithAttributes(attribute.String(IGOSampleNameKey, su[0].SampleName)))
-			usSpan.AddEvent(handingOffSampleToRunLoopMsg, trace.WithAttributes(attribute.String(IGOSampleNameKey, su[0].SampleName)))
+			su := sm.LatestSampleMetadata
+			usSpan.AddEvent(processingUpSampSucMsg, trace.WithAttributes(attribute.String(IGOSampleNameKey, su.SampleName)))
+			usSpan.AddEvent(handingOffSampleToRunLoopMsg, trace.WithAttributes(attribute.String(IGOSampleNameKey, su.SampleName)))
 			usSpan.End()
-			upSampleCh <- IGOSampleAdapter{su, m, subscribeCtx}
+			upSampleCh <- IGOSampleAdapter{[]SmileSample{su}, m, subscribeCtx}
 		case m.Subject == releaseTEMPOSamplesFilter:
 			subscribeCtx, rtsSpan := tracer.Start(ctx, incomingReleaseTEMPOSamplesMsg)
 			tempoSamples, err := protoUnMarshal(m.Data)

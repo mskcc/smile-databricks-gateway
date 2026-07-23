@@ -8,7 +8,11 @@ ENV GOPRIVATE=github.mskcc.org/*
 ARG GITHUB_TOKEN
 ENV GITHUB_TOKEN=${GITHUB_TOKEN}
 
-RUN git config --global url."https://${GITHUB_TOKEN}@github.mskcc.org/".insteadOf "https://github.mskcc.org/"
+ARG GITHUB_USER
+RUN git config --global url."https://${GITHUB_USER}:${GITHUB_TOKEN}@github.mskcc.org/".insteadOf "https://github.mskcc.org/"
+
+# refresh CA bundle so TLS verification of github.mskcc.org (Sectigo Root R46) succeeds
+RUN apt-get update && apt-get install -y --only-upgrade ca-certificates && update-ca-certificates
 
 # set destination for copy commands
 WORKDIR /smile-databricks-gateway

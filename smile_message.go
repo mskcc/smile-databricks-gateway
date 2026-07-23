@@ -97,3 +97,10 @@ type SmileSample struct {
 	SampleAliases        []*SampleAliases      `json:"sampleAliases"`
 	AdditionalProperties *AdditionalProperties `json:"additionalProperties"`
 }
+
+// SmileSampleUpdateMessage mirrors the envelope published on cmo-sample-update:
+// the per-sample fields Databricks needs (sampleName, primaryId, additionalProperties,
+// etc.) live under latestSampleMetadata, not at the message's top level.
+type SmileSampleUpdateMessage struct {
+	LatestSampleMetadata SmileSample `json:"latestSampleMetadata"`
+}
