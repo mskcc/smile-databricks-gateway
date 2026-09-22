@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -89,7 +90,7 @@ const (
 	succSlackNotifMsg = "Successfully sent slack notification"
 )
 
-func (ss *SmileService) Run(ctx context.Context, consumer, subjectFilter, newIGORequestFilter, updateIGORequestFilter, updateIGOSampleFilter, igoAWSBucket, releaseTEMPOSamplesFilter, updateTEMPOSampleFilter, tempoAWSBucket string, tracer trace.Tracer, slackURL string) error {
+func (ss *SmileService) Run(ctx context.Context, consumer, subjectFilter, newIGORequestFilter, updateIGORequestFilter, updateIGOSampleFilter, igoAWSBucket, releaseTEMPOSamplesFilter, updateTEMPOSampleFilter, tempoAWSBucket, tempoClinicalPath string, tracer trace.Tracer, slackURL string) error {
 	newIGORequestChan := make(chan IGORequestAdapter, igoRequestBufSize)
 	updateIGORequestChan := make(chan IGORequestAdapter, igoRequestBufSize)
 	updateIGOSampleChan := make(chan IGOSampleAdapter, igoSampleBufSize)
@@ -132,11 +133,11 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subjectFilter, newIGO
 		case tsa := <-releaseTEMPOSamplesChan:
 			tsaCtx, tsaSpan := tracer.Start(tsa.SpanCtx, TEMPOReleasedWriteMsg)
 			trswg.Add(1)
-			go ss.processTEMPOSamples(tsaCtx, trswg, tsaSpan, tsa, TEMPOReleasedSamplesS3WriteErrMsg, TEMPOReleasedSamplesS3WriteSucMsg, succProcessTEMPOReleasedMsg, tempoAWSBucket, slackURL)
+			go ss.processTEMPOSamples(tsaCtx, trswg, tsaSpan, tsa, TEMPOReleasedSamplesS3WriteErrMsg, TEMPOReleasedSamplesS3WriteSucMsg, succProcessTEMPOReleasedMsg, tempoAWSBucket, tempoClinicalPath, slackURL)
 		case tsa := <-updateTEMPOSamplesChan:
 			tsaCtx, tsaSpan := tracer.Start(tsa.SpanCtx, TEMPOUpdatedWriteMsg)
 			tuswg.Add(1)
-			go ss.processTEMPOSamples(tsaCtx, tuswg, tsaSpan, tsa, TEMPOUpdatedSamplesS3WriteErrMsg, TEMPOUpdatedSamplesS3WriteSucMsg, succProcessTEMPOUpdatedMsg, tempoAWSBucket, slackURL)
+			go ss.processTEMPOSamples(tsaCtx, tuswg, tsaSpan, tsa, TEMPOUpdatedSamplesS3WriteErrMsg, TEMPOUpdatedSamplesS3WriteSucMsg, succProcessTEMPOUpdatedMsg, tempoAWSBucket, tempoClinicalPath, slackURL)
 		case <-ctx.Done():
 			log.Println("Context canceled, returning...")
 			nigorwg.Wait()
@@ -223,10 +224,10 @@ func (ss *SmileService) processUpdateIGOSample(usCtx context.Context, uigoswg sy
 	usSpan.End()
 }
 
-func (ss *SmileService) processTEMPOSamples(tsaCtx context.Context, tsawg sync.WaitGroup, tsaSpan trace.Span, tsa TEMPOSampleAdapter, samplePutErrMsg, samplePutSucMsg, sucProcessMsg, tempoAWSBucket, slackURL string) {
+func (ss *SmileService) processTEMPOSamples(tsaCtx context.Context, tsawg sync.WaitGroup, tsaSpan trace.Span, tsa TEMPOSampleAdapter, samplePutErrMsg, samplePutSucMsg, sucProcessMsg, tempoAWSBucket, tempoClinicalPath, slackURL string) {
 	defer tsawg.Done()
 	for _, sample := range tsa.Samples {
-		filename := fmt.Sprintf("%s_clinical.json", sample.PrimaryId)
+		filename := path.Join(tempoClinicalPath, fmt.Sprintf("%s_clinical.json", sample.PrimaryId))
 		err := ss.awsS3Service.PutTEMPOSample(filename, tempoAWSBucket, *sample)
 		if handleError(err, samplePutErrMsg, tsaSpan) {
 			return

@@ -21,6 +21,7 @@ type Config struct {
 	SAMLRegion         string  `docopt:"--saml2region"`
 	IGOAWSBucket       string  `docopt:"--igoawsbucket"`
 	TEMPOAWSBucket     string  `docopt:"--tempoawsbucket"`
+	TEMPOClinicalPath  string  `docopt:"--tempoclinicalpath"`
 	AWSSessionDuration float64 `docopt:"--awssessionduration"`
 }
 
