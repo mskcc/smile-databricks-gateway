@@ -12,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	st "github.mskcc.org/cdsi/cdsi-protobuf/smile/generated/v1/go"
 )
 
 type AWSS3Service struct {
@@ -48,18 +47,6 @@ func (a *AWSS3Service) PutIGOSample(bucketKey, bucketName string, ss SmileSample
 	err = put[SmileSample](s3Client, bucketKey, bucketName, ss)
 	if err != nil {
 		return fmt.Errorf("Failed to PutSample: '%s': %q", ss.SampleName, err)
-	}
-	return nil
-}
-
-func (a *AWSS3Service) PutTEMPOSample(bucketKey, bucketName string, ts st.TempoSample) error {
-	s3Client, err := a.getClient()
-	if err != nil {
-		return fmt.Errorf("Failed to get s3 client: '%s': %q", ts.PrimaryId, err)
-	}
-	err = put[st.TempoSample](s3Client, bucketKey, bucketName, ts)
-	if err != nil {
-		return fmt.Errorf("Failed to PutSample: '%s': %q", ts.PrimaryId, err)
 	}
 	return nil
 }

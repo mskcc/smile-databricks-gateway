@@ -5,14 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"path"
 	"strconv"
-	"strings"
 	"sync"
 
 	nm "github.com/mskcc/nats-messaging-go"
-	st "github.mskcc.org/cdsi/cdsi-protobuf/smile/generated/v1/go"
-	"google.golang.org/protobuf/proto"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -36,16 +32,9 @@ type IGOSampleAdapter struct {
 	SpanCtx context.Context
 }
 
-type TEMPOSampleAdapter struct {
-	Samples []*st.TempoSample
-	Msg     *nm.Msg
-	SpanCtx context.Context
-}
-
 const (
-	igoRequestBufSize  = 1
-	igoSampleBufSize   = 1
-	tempoSampleBufSize = 1
+	igoRequestBufSize = 1
+	igoSampleBufSize  = 1
 )
 
 func NewSmileService(url, certPath, keyPath, consumer, password string, awsS3Service *AWSS3Service) (*SmileService, error) {
@@ -75,30 +64,16 @@ const (
 	upIGOSampleS3WriteSucMsg  = "Successfully updated an IGO sample in an S3 bucket"
 	succProcessedUpIGOSampMsg = "Successfully processed an IGO sample update: %s"
 
-	TEMPOReleasedWriteMsg             = "Attempting to write released TEMPO Samples into S3 bucket"
-	TEMPOReleasedSamplesS3WriteErrMsg = "Error writing released TEMPO sample into S3 bucket"
-	TEMPOReleasedSamplesS3WriteSucMsg = "Successfully wrote released TEMPO sample into S3 bucket"
-	succProcessTEMPOReleasedMsg       = "Successfully processed released TEMPO Samples"
-	TEMPOUpdatedWriteMsg              = "Attempting to write updated TEMPO Samples into S3 bucket"
-	TEMPOUpdatedSamplesS3WriteErrMsg  = "Error writing updated TEMPO sample into S3 bucket"
-	TEMPOUpdatedSamplesS3WriteSucMsg  = "Successfully wrote updated TEMPO sample into S3 bucket"
-	succProcessTEMPOUpdatedMsg        = "Successfully processed updated TEMPO Samples"
-	TEMPOSampleNamesKey               = "TEMPO Sample Names"
-	TEMPOSampleNameKey                = "TEMPO Sample Name"
-
 	errSlackNotifMsg  = "Error sending slack notification"
 	succSlackNotifMsg = "Successfully sent slack notification"
 )
 
-func (ss *SmileService) Run(ctx context.Context, consumer, subjectFilter, newIGORequestFilter, updateIGORequestFilter, updateIGOSampleFilter, igoAWSBucket, releaseTEMPOSamplesFilter, updateTEMPOSampleFilter, tempoAWSBucket, tempoClinicalPath string, tracer trace.Tracer, slackURL string) error {
+func (ss *SmileService) Run(ctx context.Context, consumer, subjectFilter, newIGORequestFilter, updateIGORequestFilter, updateIGOSampleFilter, igoAWSBucket string, tracer trace.Tracer, slackURL string) error {
 	newIGORequestChan := make(chan IGORequestAdapter, igoRequestBufSize)
 	updateIGORequestChan := make(chan IGORequestAdapter, igoRequestBufSize)
 	updateIGOSampleChan := make(chan IGOSampleAdapter, igoSampleBufSize)
-	releaseTEMPOSamplesChan := make(chan TEMPOSampleAdapter, tempoSampleBufSize)
-	updateTEMPOSamplesChan := make(chan TEMPOSampleAdapter, tempoSampleBufSize)
 	// a nats consumer can only have one subject filter when created, so we need to have a single event handler
-	err := ss.subscribeToSubjects(ctx, consumer, subjectFilter, newIGORequestChan, updateIGORequestChan, updateIGOSampleChan, newIGORequestFilter, updateIGORequestFilter, updateIGOSampleFilter,
-		releaseTEMPOSamplesChan, updateTEMPOSamplesChan, releaseTEMPOSamplesFilter, updateTEMPOSampleFilter, tracer)
+	err := ss.subscribeToSubjects(ctx, consumer, subjectFilter, newIGORequestChan, updateIGORequestChan, updateIGOSampleChan, newIGORequestFilter, updateIGORequestFilter, updateIGOSampleFilter, tracer)
 	if err != nil {
 		return err
 	}
@@ -106,8 +81,6 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subjectFilter, newIGO
 	var nigorwg sync.WaitGroup
 	var uigorwg sync.WaitGroup
 	var uigoswg sync.WaitGroup
-	var trswg sync.WaitGroup
-	var tuswg sync.WaitGroup
 	for {
 		select {
 		case ra := <-newIGORequestChan:
@@ -130,21 +103,11 @@ func (ss *SmileService) Run(ctx context.Context, consumer, subjectFilter, newIGO
 			usSpan.SetAttributes(attribute.String(IGOSampleNameKey, sa.Samples[0].SampleName))
 			uigoswg.Add(1)
 			go ss.processUpdateIGOSample(usCtx, uigoswg, usSpan, sa, igoAWSBucket, slackURL)
-		case tsa := <-releaseTEMPOSamplesChan:
-			tsaCtx, tsaSpan := tracer.Start(tsa.SpanCtx, TEMPOReleasedWriteMsg)
-			trswg.Add(1)
-			go ss.processTEMPOSamples(tsaCtx, trswg, tsaSpan, tsa, TEMPOReleasedSamplesS3WriteErrMsg, TEMPOReleasedSamplesS3WriteSucMsg, succProcessTEMPOReleasedMsg, tempoAWSBucket, tempoClinicalPath, slackURL)
-		case tsa := <-updateTEMPOSamplesChan:
-			tsaCtx, tsaSpan := tracer.Start(tsa.SpanCtx, TEMPOUpdatedWriteMsg)
-			tuswg.Add(1)
-			go ss.processTEMPOSamples(tsaCtx, tuswg, tsaSpan, tsa, TEMPOUpdatedSamplesS3WriteErrMsg, TEMPOUpdatedSamplesS3WriteSucMsg, succProcessTEMPOUpdatedMsg, tempoAWSBucket, tempoClinicalPath, slackURL)
 		case <-ctx.Done():
 			log.Println("Context canceled, returning...")
 			nigorwg.Wait()
 			uigorwg.Wait()
 			uigoswg.Wait()
-			trswg.Wait()
-			tuswg.Wait()
 			ss.natsMessaging.Shutdown()
 			return nil
 		}
@@ -224,28 +187,6 @@ func (ss *SmileService) processUpdateIGOSample(usCtx context.Context, uigoswg sy
 	usSpan.End()
 }
 
-func (ss *SmileService) processTEMPOSamples(tsaCtx context.Context, tsawg sync.WaitGroup, tsaSpan trace.Span, tsa TEMPOSampleAdapter, samplePutErrMsg, samplePutSucMsg, sucProcessMsg, tempoAWSBucket, tempoClinicalPath, slackURL string) {
-	defer tsawg.Done()
-	for _, sample := range tsa.Samples {
-		filename := path.Join(tempoClinicalPath, fmt.Sprintf("%s_clinical.json", sample.PrimaryId))
-		err := ss.awsS3Service.PutTEMPOSample(filename, tempoAWSBucket, *sample)
-		if handleError(err, samplePutErrMsg, tsaSpan) {
-			return
-		}
-		tsaSpan.AddEvent(samplePutSucMsg, trace.WithAttributes(attribute.String(TEMPOSampleNameKey, sample.PrimaryId)))
-	}
-	tsaSpan.SetAttributes(attribute.Int(NumSamplesWrittenKey, len(tsa.Samples)))
-	tsa.Msg.ProviderMsg.Ack()
-	mesg := fmt.Sprintf("{\"text\":\"TEMPO samples written to Databricks S3 bucket:\n\t%s: %s\"}", TEMPOSampleNamesKey, tsa.Samples)
-	err := NotifyViaSlack(tsaCtx, mesg, slackURL)
-	if handleError(err, errSlackNotifMsg, tsaSpan) {
-		return
-	}
-	tsaSpan.AddEvent(succSlackNotifMsg)
-	tsaSpan.SetStatus(codes.Ok, fmt.Sprintf(sucProcessMsg))
-	tsaSpan.End()
-}
-
 const (
 	incomingNewReqMsg      = "Received new request"
 	processingNewReqErrMsg = "Error unmarshaling new request"
@@ -261,20 +202,9 @@ const (
 
 	handingOffRequestToRunLoopMsg = "Handing off request for writing to S3 bucket connected to Databricks"
 	handingOffSampleToRunLoopMsg  = "Handing off sample for writing to an S3 bucket connected to Databricks"
-
-	incomingReleaseTEMPOSamplesMsg      = "Received release TEMPO samples message"
-	processingReleaseTEMPOSamplesErrMsg = "Error unmarshaling release TEMPO samples message"
-	processingReleaseTEMPOSamplesSucMsg = "Successfully unmarshaled release TEMPO samples message"
-
-	incomingUpTEMPOSamplesMsg      = "Received TEMPO sample update"
-	processingUpTEMPOSamplesErrMsg = "Error unmarshaling TEMPO sample updates"
-	processingUpTEMPOSamplesSucMsg = "Successfully unmarshaled TEMPO sample updates"
-
-	handingOffTEMPOSamplesToRunLoopMsg = "Handing off TEMPO samples for writing to S3 bucket connected to Databricks"
 )
 
-func (ss *SmileService) subscribeToSubjects(ctx context.Context, consumer, subjectFilter string, newRequestCh, upRequestCh chan IGORequestAdapter, upSampleCh chan IGOSampleAdapter, newRequestFilter, updateRequestFilter, updateSampleFilter string,
-	releaseTEMPOSamplesCh, updateTEMPOSampleCh chan TEMPOSampleAdapter, releaseTEMPOSamplesFilter, updateTEMPOSampleFilter string, tracer trace.Tracer) error {
+func (ss *SmileService) subscribeToSubjects(ctx context.Context, consumer, subjectFilter string, newRequestCh, upRequestCh chan IGORequestAdapter, upSampleCh chan IGOSampleAdapter, newRequestFilter, updateRequestFilter, updateSampleFilter string, tracer trace.Tracer) error {
 	err := ss.natsMessaging.Subscribe(consumer, subjectFilter, func(m *nm.Msg) {
 		switch {
 		case m.Subject == newRequestFilter:
@@ -308,43 +238,12 @@ func (ss *SmileService) subscribeToSubjects(ctx context.Context, consumer, subje
 			usSpan.AddEvent(handingOffSampleToRunLoopMsg, trace.WithAttributes(attribute.String(IGOSampleNameKey, su.SampleName)))
 			usSpan.End()
 			upSampleCh <- IGOSampleAdapter{[]SmileSample{su}, m, subscribeCtx}
-		case m.Subject == releaseTEMPOSamplesFilter:
-			subscribeCtx, rtsSpan := tracer.Start(ctx, incomingReleaseTEMPOSamplesMsg)
-			tempoSamples, err := protoUnMarshal(m.Data)
-			if handleError(err, processingReleaseTEMPOSamplesErrMsg, rtsSpan) {
-				break
-			}
-			rtsSpan.AddEvent(processingReleaseTEMPOSamplesSucMsg, trace.WithAttributes(attribute.String(TEMPOSampleNamesKey, buildStringFromTEMPOSamples(tempoSamples))))
-			rtsSpan.AddEvent(handingOffTEMPOSamplesToRunLoopMsg, trace.WithAttributes(attribute.String(TEMPOSampleNamesKey, buildStringFromTEMPOSamples(tempoSamples))))
-			rtsSpan.End()
-			releaseTEMPOSamplesCh <- TEMPOSampleAdapter{tempoSamples, m, subscribeCtx}
-		case m.Subject == updateTEMPOSampleFilter:
-			subscribeCtx, utsSpan := tracer.Start(ctx, incomingUpTEMPOSamplesMsg)
-			tempoSamples, err := protoUnMarshal(m.Data)
-			if handleError(err, processingUpTEMPOSamplesErrMsg, utsSpan) {
-				break
-			}
-			utsSpan.AddEvent(processingUpTEMPOSamplesSucMsg, trace.WithAttributes(attribute.String(TEMPOSampleNamesKey, buildStringFromTEMPOSamples(tempoSamples))))
-			utsSpan.AddEvent(handingOffTEMPOSamplesToRunLoopMsg, trace.WithAttributes(attribute.String(TEMPOSampleNamesKey, buildStringFromTEMPOSamples(tempoSamples))))
-			utsSpan.End()
-			updateTEMPOSampleCh <- TEMPOSampleAdapter{tempoSamples, m, subscribeCtx}
 		default:
 			// not interested in message, Ack it so we don't get it again
 			m.ProviderMsg.Ack()
 		}
 	})
 	return err
-}
-
-func buildStringFromTEMPOSamples(tempoSamples []*st.TempoSample) string {
-	var builder strings.Builder
-	for lc, tempoSample := range tempoSamples {
-		if lc > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(tempoSample.CmoSampleName)
-	}
-	return builder.String()
 }
 
 func unMarshal[T any](msgData string) (T, error) {
@@ -357,14 +256,6 @@ func unMarshal[T any](msgData string) (T, error) {
 		return target, err
 	}
 	return target, nil
-}
-
-func protoUnMarshal(data []byte) ([]*st.TempoSample, error) {
-	var tempoSamples st.TempoSampleUpdateMessage
-	if err := proto.Unmarshal(data, &tempoSamples); err != nil {
-		return tempoSamples.TempoSamples, err
-	}
-	return tempoSamples.TempoSamples, nil
 }
 
 func handleError(err error, message string, span trace.Span) bool {

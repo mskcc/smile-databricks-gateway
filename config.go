@@ -10,8 +10,6 @@ type Config struct {
 	MomNrf             string  `docopt:"--momnrf"`
 	MomUrf             string  `docopt:"--momurf"`
 	MomUsf             string  `docopt:"--momusf"`
-	MomRsf             string  `docopt:"--momrsf"`
-	MomUef             string  `docopt:"--momuef"`
 	OTELTracerHost     string  `docopt:"--tracerhost"`
 	OTELTracerPort     int     `docopt:"--tracerport"`
 	DatadogServiceName string  `docopt:"--ddservicename"`
@@ -20,8 +18,6 @@ type Config struct {
 	SAMLProfile        string  `docopt:"--saml2profile"`
 	SAMLRegion         string  `docopt:"--saml2region"`
 	IGOAWSBucket       string  `docopt:"--igoawsbucket"`
-	TEMPOAWSBucket     string  `docopt:"--tempoawsbucket"`
-	TEMPOClinicalPath  string  `docopt:"--tempoclinicalpath"`
 	AWSSessionDuration float64 `docopt:"--awssessionduration"`
 }
 

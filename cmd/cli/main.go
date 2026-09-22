@@ -25,8 +25,6 @@ Usage:
                            --momnrf=<momnrf>
                            --momurf=<momurf>
                            --momusf=<momusf>
-                           --momrsf=<momrsf>
-                           --momuef=<momuef>
                            --tracerhost=<hostname>
                            --tracerport=<port>
                            --ddservicename=<name>
@@ -35,8 +33,6 @@ Usage:
                            --saml2profile=<profile>
                            --saml2region=<region>
                            --igoawsbucket=<bucket>
-                           --tempoawsbucket=<bucket>
-                           [--tempoclinicalpath=<path>]
                            --awssessionduration=<duration>
 Options:
   -h --help                           Show this screen.
@@ -49,8 +45,6 @@ Options:
   --momnrf=<momnrf>                   The messaging system new request topic filter.
   --momurf=<momurf>                   The messaging system update request topic filter.
   --momusf=<momusf>                   The messaging system update sample topic filter.
-  --momrsf=<momrsf>                   The messaging system release tempo samples topic filter.
-  --momuef=<momuef>                   The messaging system update tempo sample embargo topic filter.
   --tracerhost=<hostname>             OTel Tracer hostname.
   --tracerport=<port>                 OTel Tracer port.
   --ddservicename=<name>              Datadog service name.
@@ -59,8 +53,6 @@ Options:
   --saml2profile=<profile>            The aws creds profile
   --saml2region=<region>              The aws region
   --igoawsbucket=<bucket>             The dest bucket for igo metadata (smile data sourced from IGO lims rest)
-  --tempoawsbucket=<bucket>           The dest bucket for tempo metadata (smile data sourced from TEMPO)
-  --tempoclinicalpath=<path>          The S3 key prefix for tempo clinical json files [default: clinical/]
   --awssessionduration=<duration>     The time of the aws session (in seconds)
 `
 
@@ -107,7 +99,7 @@ func main() {
 	// setup smile service
 	smileService, err := sdg.NewSmileService(config.MomUrl, config.MomCert, config.MomKey, config.MomCons, config.MomPw, awsS3Service)
 	handleError(err, "SMILE Service cannot be created")
-	if err := smileService.Run(ctx, config.MomCons, config.MomSub, config.MomNrf, config.MomUrf, config.MomUsf, config.IGOAWSBucket, config.MomRsf, config.MomUef, config.TEMPOAWSBucket, config.TEMPOClinicalPath, tracer, config.SlackURL); err != nil {
+	if err := smileService.Run(ctx, config.MomCons, config.MomSub, config.MomNrf, config.MomUrf, config.MomUsf, config.IGOAWSBucket, tracer, config.SlackURL); err != nil {
 		os.Exit(1)
 	}
 	log.Println("Exiting SMILE Databricks Gateway...")
